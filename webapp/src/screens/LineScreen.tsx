@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Button, Input, Textarea } from '@maxhub/max-ui'
 import { api, type ActView, type LineInput, type LineView, type S } from '../api/client'
 import { reviewTitle, rub } from '../format'
-import { Card, Chip, useToast } from '../ui'
+import { Card, Chip, Sheet, useToast } from '../ui'
 
 const statuses: S['ReviewStatus'][] = ['confirmed', 'doubtful', 'not_done']
 
@@ -15,6 +15,7 @@ export function LineScreen({ view, line, reload, onDeleted }: { view: ActView; l
   const [edit, setEdit] = useState(false)
   const [fields, setFields] = useState({ work_name: line.work_name, periodicity_qty: line.periodicity_qty, unit: line.unit, unit_price: line.unit_price ?? '', amount: line.amount })
   const fileRef = useRef<HTMLInputElement>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [note, setNote] = useState('')
 
   const save = async (patch: LineInput, key: string, msg = 'Сохранено') => {
@@ -172,19 +173,7 @@ export function LineScreen({ view, line, reload, onDeleted }: { view: ActView; l
                 <Button variant="secondary" loading={busy === 'fields'} onClick={() => save(fields, 'fields')}>
                   Сохранить
                 </Button>
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    if (!confirm('Удалить строку?')) return
-                    try {
-                      await api.deleteLine(line.id)
-                      toast('Строка удалена')
-                      onDeleted()
-                    } catch (e) {
-                      toast((e as Error).message, 'bad')
-                    }
-                  }}
-                >
+                <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
                   Удалить строку
                 </Button>
               </div>
@@ -193,6 +182,32 @@ export function LineScreen({ view, line, reload, onDeleted }: { view: ActView; l
         </Card>
       )}
       {!editable && <Chip>Акт закрыт для изменений</Chip>}
+      {/* window.confirm в webview мини-приложений может быть заблокирован — подтверждаем своим окном */}
+      <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Удалить строку?">
+        <p>
+          «{line.work_name}» и её доказательства ({line.evidence.length}) будут удалены. Действие нельзя отменить.
+        </p>
+        <Button
+          stretched
+          variant="destructive"
+          loading={busy === 'delete'}
+          onClick={async () => {
+            setBusy('delete')
+            try {
+              await api.deleteLine(line.id)
+              toast('Строка удалена')
+              setConfirmDelete(false)
+              onDeleted()
+            } catch (e) {
+              toast((e as Error).message, 'bad')
+            } finally {
+              setBusy('')
+            }
+          }}
+        >
+          Удалить
+        </Button>
+      </Sheet>
     </>
   )
 }

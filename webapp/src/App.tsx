@@ -45,6 +45,15 @@ export function App() {
     void reload()
   }, [reload, actId])
 
+  // Подписанные ссылки на фото и документы живут 30 минут: при возврате в приложение обновляем карточку.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void reload()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [reload])
+
   const push = (r: Route) => setStack((s) => [...s, r])
   const back = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), [])
   const canBack = stack.length > 1
@@ -89,7 +98,7 @@ export function App() {
   const line = view?.lines.find((l) => l.id === route.lineId)
   return (
     <Screen title="Строка акта" onBack={back}>
-      {body ?? (line ? <LineScreen key={line.id + line.updated_at} view={view!} line={line} reload={reload} onDeleted={() => { back(); void reload() }} /> : <ErrorBox message="Строка удалена." />)}
+      {body ?? (line ? <LineScreen key={line.id} view={view!} line={line} reload={reload} onDeleted={() => { back(); void reload() }} /> : <ErrorBox message="Строка удалена." />)}
     </Screen>
   )
 }

@@ -300,7 +300,20 @@ function DecisionCard({ view, reload }: { view: ActView; reload: () => Promise<v
             📄 {doc.kind === 'refusal' ? 'Мотивированный отказ' : 'Сопроводительное письмо'} · версия {doc.version} · {date(doc.created_at)}
           </p>
           <div className="row gap wrap">
-            <Button size="small" variant="secondary" onClick={() => download(doc.url, `${doc.kind}_act-${a.number || 'b-n'}.pdf`)}>
+            <Button
+              size="small"
+              variant="secondary"
+              onClick={async () => {
+                // Ссылка в карточке могла устареть (живёт 30 минут) — берём свежую.
+                try {
+                  const fresh = await api.act(a.id)
+                  const d = fresh.documents.find((x) => x.id === doc.id) ?? fresh.documents[0]
+                  await download(d.url, `${d.kind}_act-${a.number || 'b-n'}_v${d.version}.pdf`)
+                } catch (e) {
+                  toast((e as Error).message, 'bad')
+                }
+              }}
+            >
               Скачать PDF
             </Button>
             {a.status === 'decided' && (
@@ -409,26 +422,34 @@ function SuccessorCard({ view, openAct }: { view: ActView; openAct: (id: string)
   )
 }
 
-const headerFields: { key: keyof HeaderPatch; label: string; type?: 'date' | 'money' }[] = [
+type HeaderField = { key: keyof HeaderPatch; label: string; type?: 'date' | 'money' | 'select'; options?: [string, string][]; kind?: 'number' | 'bool' }
+
+// Поля формы акта (приказ Минстроя № 761/пр) в порядке документа.
+const headerFields: HeaderField[] = [
   { key: 'number', label: 'Номер акта' },
   { key: 'act_date', label: 'Дата акта', type: 'date' },
-  { key: 'period_from', label: 'Период: с', type: 'date' },
-  { key: 'period_to', label: 'Период: по', type: 'date' },
-  { key: 'total_amount', label: 'Итого по п. 2, руб.', type: 'money' },
+  { key: 'city', label: 'Город' },
+  { key: 'address', label: 'Адрес дома' },
+  { key: 'customer_full_name', label: 'Заказчик: председатель (ФИО)' },
+  { key: 'customer_apartment', label: 'Квартира председателя' },
+  { key: 'customer_authority_text', label: 'Основание полномочий' },
   { key: 'executor_name', label: 'Исполнитель' },
   { key: 'executor_signatory_name', label: 'Подписант исполнителя (ФИО)' },
   { key: 'executor_signatory_position', label: 'Должность подписанта' },
   { key: 'executor_basis', label: 'Действует на основании' },
+  { key: 'contract_type', label: 'Вид договора', type: 'select', options: [['management', 'Договор управления'], ['services', 'Договор оказания услуг'], ['repair', 'Договор подряда']] },
   { key: 'contract_number', label: 'Договор №' },
   { key: 'contract_date', label: 'Дата договора', type: 'date' },
   { key: 'contract_end_date', label: 'Договор действует до', type: 'date' },
-  { key: 'executor_sent_on', label: 'Дата отправки акта исполнителем (если известна)', type: 'date' },
+  { key: 'period_from', label: 'Период: с', type: 'date' },
+  { key: 'period_to', label: 'Период: по', type: 'date' },
+  { key: 'total_amount', label: 'Итого по п. 2, руб.', type: 'money' },
+  { key: 'total_amount_words', label: 'Сумма прописью (как в акте)' },
   { key: 'received_on', label: 'Дата получения акта', type: 'date' },
-  { key: 'customer_full_name', label: 'Заказчик: председатель (ФИО)' },
-  { key: 'customer_apartment', label: 'Квартира председателя' },
-  { key: 'customer_authority_text', label: 'Основание полномочий' },
-  { key: 'address', label: 'Адрес дома' },
-  { key: 'city', label: 'Город' },
+  { key: 'received_channel', label: 'Как получен', type: 'select', options: [['', '—'], ...Object.entries(channelTitle)] },
+  { key: 'copies_received', label: 'Получено экземпляров', type: 'select', kind: 'number', options: [['', '—'], ['2', '2'], ['1', '1'], ['0', '0']] },
+  { key: 'executor_signed', label: 'Подписаны исполнителем', type: 'select', kind: 'bool', options: [['', '—'], ['true', 'Да'], ['false', 'Нет']] },
+  { key: 'executor_sent_on', label: 'Дата отправки акта исполнителем (если известна)', type: 'date' },
 ]
 
 function HeaderCard({ view, onChange }: { view: ActView; onChange: (v: ActView) => void }) {
@@ -436,15 +457,20 @@ function HeaderCard({ view, onChange }: { view: ActView; onChange: (v: ActView) 
   const [open, setOpen] = useState(!view.act.act_date && view.editable)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  const a = view.act as unknown as Record<string, string | null>
-  const val = (k: string) => draft[k] ?? a[k] ?? ''
+  const a = view.act as unknown as Record<string, string | number | boolean | null>
+  const val = (k: string) => draft[k] ?? (a[k] == null ? '' : String(a[k]))
   const dirty = Object.keys(draft).length > 0
   const save = async () => {
     setBusy(true)
-    const patch: Record<string, string | null> = {}
+    const patch: Record<string, string | number | boolean | null> = {}
     for (const [k, v] of Object.entries(draft)) {
       const f = headerFields.find((x) => x.key === k)
-      patch[k] = f?.type === 'date' ? v || null : v
+      if (f?.kind === 'number' || f?.kind === 'bool') {
+        if (v === '') continue // «не указано» не отправляем
+        patch[k] = f.kind === 'number' ? Number(v) : v === 'true'
+      } else {
+        patch[k] = f?.type === 'date' ? v || null : v
+      }
     }
     if (patch.received_on === null) delete patch.received_on
     try {
@@ -473,13 +499,23 @@ function HeaderCard({ view, onChange }: { view: ActView; onChange: (v: ActView) 
             {headerFields.map((f) => (
               <label key={f.key} className="field">
                 {f.label}
-                <Input
-                  type={f.type === 'date' ? 'date' : 'text'}
-                  inputMode={f.type === 'money' ? 'decimal' : undefined}
-                  value={val(f.key)}
-                  disabled={!view.editable}
-                  onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                />
+                {f.type === 'select' ? (
+                  <select className="select" value={val(f.key)} disabled={!view.editable} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}>
+                    {f.options!.map(([v, t]) => (
+                      <option key={v} value={v}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    type={f.type === 'date' ? 'date' : 'text'}
+                    inputMode={f.type === 'money' ? 'decimal' : undefined}
+                    value={val(f.key)}
+                    disabled={!view.editable}
+                    onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                  />
+                )}
               </label>
             ))}
           </div>
