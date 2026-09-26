@@ -23,6 +23,57 @@ type Bot struct {
 	svc   *app.Service
 	log   *slog.Logger
 	locks sync.Map // max_user_id → *sync.Mutex: события одного пользователя обрабатываются по очереди
+	seen  dedup
+}
+
+// dedup помнит недавно обработанные события: повторная доставка вебхука не должна
+// создать второй акт или второй раз выполнить действие кнопки.
+type dedup struct {
+	mu   sync.Mutex
+	keys map[string]time.Time
+}
+
+const dedupTTL = 10 * time.Minute
+
+// first возвращает true, если событие с таким ключом встречается впервые за dedupTTL.
+func (d *dedup) first(key string, now time.Time) bool {
+	if key == "" {
+		return true
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.keys == nil {
+		d.keys = map[string]time.Time{}
+	}
+	if len(d.keys) > 10000 {
+		for k, t := range d.keys {
+			if now.Sub(t) > dedupTTL {
+				delete(d.keys, k)
+			}
+		}
+	}
+	if t, ok := d.keys[key]; ok && now.Sub(t) <= dedupTTL {
+		return false
+	}
+	d.keys[key] = now
+	return true
+}
+
+// updateKey — идентификатор события для защиты от повторов.
+func updateKey(u model.Update) string {
+	switch u.UpdateType {
+	case model.UpdateMessageCreated:
+		if mid := u.GetMessage().Body.Mid; mid != "" {
+			return "m:" + mid
+		}
+	case model.UpdateMessageCallback:
+		if id := u.GetCallback().CallbackID; id != "" {
+			return "c:" + id
+		}
+	case model.UpdateBotStarted:
+		return fmt.Sprintf("s:%d:%d", u.GetUser().UserID, u.Timestamp)
+	}
+	return ""
 }
 
 func New(c *maxbot.Client, svc *app.Service, log *slog.Logger) *Bot {
@@ -55,6 +106,10 @@ func (b *Bot) Handle(ctx context.Context, u model.Update) {
 		return
 	}
 	if sender.UserID == 0 || sender.IsBot {
+		return
+	}
+	if !b.seen.first(updateKey(u), time.Now()) {
+		b.log.Info("bot: повторная доставка события пропущена", "type", u.UpdateType)
 		return
 	}
 	mu, _ := b.locks.LoadOrStore(sender.UserID, &sync.Mutex{})

@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -87,7 +88,9 @@ func (c *Client) wait(ctx context.Context) error {
 	}
 }
 
-// retryable — сетевые сбои и перегрузка платформы повторяем, ошибки запроса — нет.
+// retryable — сетевые сбои, перегрузка и временная недоступность платформы повторяем, ошибки запроса — нет.
+// Библиотека не сохраняет HTTP-статус, поэтому временную ошибку узнаём по коду в теле ответа, а ответ
+// не в формате JSON (страница прокси при 502/503) считаем временным.
 func retryable(err error) bool {
 	var ne *maxapi.NetworkError
 	var te *maxapi.TimeoutError
@@ -96,10 +99,18 @@ func retryable(err error) bool {
 	case errors.As(err, &ne), errors.As(err, &te):
 		return true
 	case errors.As(err, &ae):
+		if ae.IsAttachmentNotReady() {
+			return true
+		}
 		code := strings.ToLower(ae.Code)
-		return strings.Contains(code, "too.many") || strings.Contains(code, "service") || ae.IsAttachmentNotReady()
+		for _, s := range []string{"too.many", "limit", "rate", "service", "unavailable", "internal", "timeout"} {
+			if strings.Contains(code, s) {
+				return true
+			}
+		}
+		return false
 	}
-	return false
+	return strings.Contains(err.Error(), "parse response error")
 }
 
 func (c *Client) do(ctx context.Context, op string, fn func() error) error {
@@ -119,10 +130,23 @@ func (c *Client) do(ctx context.Context, op string, fn func() error) error {
 		}
 	}
 	if err != nil {
+		if !retryable(err) {
+			return &PermanentError{Op: op, Err: err}
+		}
 		return fmt.Errorf("MAX API %s: %w", op, err)
 	}
 	return nil
 }
+
+// PermanentError — ошибка, которую повтор не исправит (чат не найден, бот заблокирован, неверный запрос).
+type PermanentError struct {
+	Op  string
+	Err error
+}
+
+func (e *PermanentError) Error() string   { return "MAX API " + e.Op + ": " + e.Err.Error() }
+func (e *PermanentError) Unwrap() error   { return e.Err }
+func (e *PermanentError) Permanent() bool { return true }
 
 // Recipient — кому отправлять: пользователю (личный чат с ботом) или в чат.
 type Recipient struct {
@@ -162,20 +186,6 @@ func (c *Client) Send(ctx context.Context, m Outgoing) (string, error) {
 	return res.Message.Body.Mid, err
 }
 
-func (c *Client) Edit(ctx context.Context, mid string, m Outgoing) error {
-	body := model.NewMessageBody{Text: m.Text, Attachments: []model.Attachment{}}
-	if m.Markdown {
-		body.Format = model.FormatMarkdown
-	}
-	if m.Keyboard != nil {
-		body.Attachments = append(body.Attachments, m.Keyboard.Build())
-	}
-	return c.do(ctx, "edit", func() error {
-		_, err := c.api.Messages.EditMessage(ctx, mid, body)
-		return err
-	})
-}
-
 // AnswerCallback снимает «часики» с нажатой кнопки и при необходимости показывает уведомление.
 func (c *Client) AnswerCallback(ctx context.Context, callbackID, notification string) error {
 	ans := model.CallbackAnswer{}
@@ -207,17 +217,26 @@ func (c *Client) UploadFile(ctx context.Context, path, name string) (string, err
 	return token, err
 }
 
-func (c *Client) Pin(ctx context.Context, chatID int64, mid string) error {
-	return c.do(ctx, "pin", func() error {
-		_, err := c.api.Chats.PinMessage(ctx, chatID, mid, false)
-		return err
-	})
+// maxHost — домены MAX, которым можно передать токен бота.
+func maxHost(host string) bool {
+	host = strings.ToLower(host)
+	for _, d := range []string{"max.ru", "oneme.ru"} {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
 }
 
-// Download скачивает вложение пользователя по URL из payload.
-func (c *Client) Download(ctx context.Context, url string) (io.ReadCloser, error) {
+// Download скачивает вложение пользователя по URL из payload. Только HTTPS; токен бота добавляется
+// при повторе после 401/403 и только для доменов MAX — чтобы не отдать его стороннему хосту.
+func (c *Client) Download(ctx context.Context, rawURL string) (io.ReadCloser, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return nil, fmt.Errorf("скачивание вложения: недопустимый адрес")
+	}
 	get := func(auth bool) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -227,7 +246,7 @@ func (c *Client) Download(ctx context.Context, url string) (io.ReadCloser, error
 		return c.http.Do(req)
 	}
 	resp, err := get(false)
-	if err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+	if err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && maxHost(u.Hostname()) {
 		resp.Body.Close()
 		resp, err = get(true)
 	}
@@ -243,7 +262,7 @@ func (c *Client) Download(ctx context.Context, url string) (io.ReadCloser, error
 
 // Subscribe регистрирует вебхук. В проде это единственный способ получать события.
 func (c *Client) Subscribe(ctx context.Context, url, secret string) error {
-	types := []string{string(model.UpdateMessageCreated), string(model.UpdateMessageCallback), string(model.UpdateBotStarted), string(model.UpdateBotAdded)}
+	types := []string{string(model.UpdateMessageCreated), string(model.UpdateMessageCallback), string(model.UpdateBotStarted)}
 	return c.do(ctx, "subscribe", func() error {
 		res, err := c.api.Subscriptions.Subscribe(ctx, url, secret, types, "")
 		if err == nil && !res.Success {
@@ -253,7 +272,51 @@ func (c *Client) Subscribe(ctx context.Context, url, secret string) error {
 	})
 }
 
-// Unsubscribe снимает все вебхуки — нужно перед long polling.
+// KeepSubscribed раз в every проверяет, что вебхук url зарегистрирован, и переподписывается при необходимости:
+// MAX отписывает бота, если 8 часов не получает успешного ответа (например, после долгого сбоя сети).
+func (c *Client) KeepSubscribed(ctx context.Context, url, secret string, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		subs, err := c.Subscriptions(ctx)
+		if err != nil {
+			c.log.Warn("MAX: проверка вебхука", "err", err)
+			continue
+		}
+		found := false
+		for _, s := range subs {
+			found = found || s == url
+		}
+		if found {
+			continue
+		}
+		if err := c.Subscribe(ctx, url, secret); err != nil {
+			c.log.Error("MAX: переподписка на вебхук", "err", err)
+			continue
+		}
+		c.log.Warn("MAX: вебхук был снят платформой — подписка восстановлена", "url", url)
+	}
+}
+
+// Subscriptions — адреса зарегистрированных вебхуков.
+func (c *Client) Subscriptions(ctx context.Context) ([]string, error) {
+	subs, err := c.api.Subscriptions.GetSubscriptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(subs.Subscriptions))
+	for _, s := range subs.Subscriptions {
+		out = append(out, s.URL)
+	}
+	return out, nil
+}
+
+// UnsubscribeAll снимает все вебхуки — нужно перед long polling.
 func (c *Client) UnsubscribeAll(ctx context.Context) error {
 	subs, err := c.api.Subscriptions.GetSubscriptions(ctx)
 	if err != nil {
@@ -270,9 +333,12 @@ func (c *Client) UnsubscribeAll(ctx context.Context) error {
 // Handler обрабатывает одно событие.
 type Handler func(ctx context.Context, u model.Update)
 
-// WebhookHandler проверяет секрет и передаёт событие обработчику.
+// WebhookHandler проверяет секрет, сразу отвечает MAX 200 и обрабатывает событие в фоне:
+// долгая обработка (БД, исходящие сообщения) не должна приводить к повторной доставке.
 func (c *Client) WebhookHandler(h Handler, secret string) http.HandlerFunc {
-	return c.api.GetHandler(maxapi.UpdateHandler(h), secret)
+	return c.api.GetHandler(func(ctx context.Context, u model.Update) {
+		go h(context.WithoutCancel(ctx), u)
+	}, secret)
 }
 
 // Poll получает события long polling до отмены ctx (только для локальной разработки).

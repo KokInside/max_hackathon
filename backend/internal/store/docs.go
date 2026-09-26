@@ -212,8 +212,13 @@ func (q *Q) ClaimDueReminders(ctx context.Context, today civil.Date, hour, limit
 // это покрывает около 6 часов недоступности MAX.
 const MaxReminderAttempts = 12
 
-// MarkReminder фиксирует отправку. При ошибке следующая попытка — через 2^попытка минут, но не больше часа.
-func (q *Q) MarkReminder(ctx context.Context, id string, sendErr error) error {
+// MarkReminder фиксирует отправку. При ошибке следующая попытка — через 2^попытка минут, но не больше часа;
+// при постоянной ошибке (giveUp) повторов больше не будет.
+func (q *Q) MarkReminder(ctx context.Context, id string, sendErr error, giveUp bool) error {
+	if sendErr != nil && giveUp {
+		_, err := q.q.Exec(ctx, `UPDATE reminders SET attempts = $3, last_error = $2, next_attempt_at = NULL WHERE id = $1`, id, sendErr.Error(), MaxReminderAttempts)
+		return err
+	}
 	if sendErr == nil {
 		_, err := q.q.Exec(ctx, `UPDATE reminders SET sent_at = now(), attempts = attempts + 1, last_error = '', next_attempt_at = NULL WHERE id = $1`, id)
 		return err

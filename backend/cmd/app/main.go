@@ -27,7 +27,7 @@ type env struct {
 	BotToken, BotMode, BotUsername, PublicURL, WebhookSecret string
 	DatabaseURL, FilesDir, FilesSecret, ConfigDir, FontsDir  string
 	ExtraCA, HTTPAddr, TestAccounts                          string
-	DemoMode, DevAuth                                        bool
+	DemoMode, DevAuth, PollingTakeover                       bool
 	InitDataTTL                                              time.Duration
 	LogLevel                                                 slog.Level
 }
@@ -56,6 +56,8 @@ func loadEnv() (env, error) {
 		TestAccounts:  os.Getenv("TEST_ACCOUNTS"),
 		DemoMode:      getenv("DEMO_MODE", "false") == "true",
 		DevAuth:       getenv("DEV_AUTH", "false") == "true",
+		// Разрешить long polling снять зарегистрированный вебхук (по умолчанию — нет: это отключит прод-бота).
+		PollingTakeover: getenv("POLLING_TAKEOVER", "false") == "true",
 	}
 	var errs []error
 	var err error
@@ -234,9 +236,18 @@ func run() error {
 				return fmt.Errorf("подписка на вебхук: %w", err)
 			}
 			log.Info("MAX: вебхук зарегистрирован", "url", e.PublicURL+"/webhook")
+			go client.KeepSubscribed(ctx, e.PublicURL+"/webhook", e.WebhookSecret, 30*time.Minute)
 		case "polling":
+			subs, err := client.Subscriptions(ctx)
+			if err != nil {
+				return fmt.Errorf("MAX: список вебхуков: %w", err)
+			}
+			if len(subs) > 0 && !e.PollingTakeover {
+				return fmt.Errorf("у бота зарегистрирован вебхук %v: long polling его снимет и отключит работающего бота. "+
+					"Для локальной проверки используйте отдельный токен или BOT_MODE=off; осознанно — POLLING_TAKEOVER=true", subs)
+			}
 			if err := client.UnsubscribeAll(ctx); err != nil {
-				log.Warn("MAX: не удалось снять вебхуки", "err", err)
+				return fmt.Errorf("MAX: снять вебхуки: %w", err)
 			}
 			go client.Poll(ctx, b.Handle)
 			log.Info("MAX: long polling (только для локальной разработки)")

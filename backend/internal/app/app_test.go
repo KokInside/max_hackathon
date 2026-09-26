@@ -555,3 +555,26 @@ func TestCoverLetterDocument(t *testing.T) {
 		t.Error("placeLine")
 	}
 }
+
+type permErr struct{}
+
+func (permErr) Error() string   { return "dialog.not.found" }
+func (permErr) Permanent() bool { return true }
+
+// Постоянная ошибка отправки (чат не найден) не повторяется.
+func TestReminderPermanentError(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	u, a := e.demoAct(t, 4004)
+	e.notif.fail = permErr{}
+	if _, err := e.svc.DemoShift(ctx, u.ID, a.ID, 0, 9); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := e.svc.Store().RawQueryRow(ctx, `SELECT max(attempts) FROM reminders WHERE act_id = $1 AND sent_at IS NULL`, a.ID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != store.MaxReminderAttempts {
+		t.Fatalf("после постоянной ошибки попыток %d, ожидалось %d (без повторов)", n, store.MaxReminderAttempts)
+	}
+}

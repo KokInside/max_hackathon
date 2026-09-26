@@ -31,6 +31,7 @@ services:
       DATABASE_URL: postgres://priemka:${POSTGRES_PASSWORD:-priemka}@db:5432/priemka?sslmode=disable
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
       BOT_MODE: ${BOT_MODE:-off}
+      POLLING_TAKEOVER: ${POLLING_TAKEOVER:-false}
       BOT_USERNAME: ${BOT_USERNAME:-t84_hakaton_max_bot}
       PUBLIC_URL: ${PUBLIC_URL:-}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}

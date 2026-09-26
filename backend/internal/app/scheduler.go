@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -12,6 +13,12 @@ import (
 )
 
 var tickMu sync.Mutex
+
+// isPermanent — ошибка отправки, которую повтор не исправит (пользователь удалил чат с ботом и т. п.).
+func isPermanent(err error) bool {
+	var p interface{ Permanent() bool }
+	return errors.As(err, &p) && p.Permanent()
+}
 
 // RunScheduler раз в минуту переводит просроченные акты в «принят молчанием» и рассылает напоминания.
 func (s *Service) RunScheduler(ctx context.Context, every time.Duration) {
@@ -124,7 +131,7 @@ func (s *Service) sendReminders(ctx context.Context) error {
 			for _, r := range due {
 				sent++
 				if latest[r.ActID].ID != r.ID {
-					if err := q.MarkReminder(ctx, r.ID, nil); err != nil {
+					if err := q.MarkReminder(ctx, r.ID, nil, false); err != nil {
 						return err
 					}
 					continue
@@ -135,7 +142,7 @@ func (s *Service) sendReminders(ctx context.Context) error {
 				}
 				// Для закрытого молчанием акта шлём только итоговое сообщение.
 				if a.Status == domain.StatusDeemedAccepted && r.Kind != "d31" {
-					if err := q.MarkReminder(ctx, r.ID, nil); err != nil {
+					if err := q.MarkReminder(ctx, r.ID, nil, false); err != nil {
 						return err
 					}
 					continue
@@ -151,7 +158,7 @@ func (s *Service) sendReminders(ctx context.Context) error {
 				if err != nil {
 					s.log.Warn("напоминание не отправлено", "act", a.ID, "kind", r.Kind, "err", err)
 				}
-				if err := q.MarkReminder(ctx, r.ID, err); err != nil {
+				if err := q.MarkReminder(ctx, r.ID, err, isPermanent(err)); err != nil {
 					return err
 				}
 				if err == nil {
