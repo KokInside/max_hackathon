@@ -138,8 +138,12 @@ func (s *session) callback(payload string) error {
 		if err != nil {
 			return err
 		}
-		if a.Status != domain.StatusDecided {
+		switch a.Status {
+		case domain.StatusDecided:
+		case domain.StatusDraft, domain.StatusInReview:
 			return s.send("Сначала сформируйте документ в мини-приложении: подписание или отказ.", actKeyboard(s.b, a, s.b.svc.Config().DemoMode))
+		default:
+			return s.send("Отмечать отправку уже не нужно: "+lowerFirst(a.Status.Title())+".", actKeyboard(s.b, a, s.b.svc.Config().DemoMode))
 		}
 		return s.send("Как вы направили документ исполнителю?", kb(
 			row(cbBtn("Лично", "dc:"+a.ID+":in_person"), cbBtn("Почтой", "dc:"+a.ID+":post")),
@@ -152,12 +156,16 @@ func (s *session) callback(payload string) error {
 		return s.send("Когда отправили?", kb(row(cbBtn("Сегодня", "dd:"+arg+":today"), cbBtn("Вчера", "dd:"+arg+":yesterday")),
 			row(cbBtn("Другая дата", "dd:"+arg+":other"))))
 	case "dd":
-		if arg2 == "other" {
-			return s.send("Напишите дату отправки, например 25.09.2026.", nil)
-		}
 		a, err := s.act(arg)
 		if err != nil {
 			return err
+		}
+		// Способ отправки хранится в сессии; если её сбросили (меню, другой акт) — спрашиваем способ заново.
+		if s.sess.State != stAwaitDispDate || s.sess.Data["act"] != a.ID || s.sess.Data["channel"] == "" {
+			return s.callback("disp:" + a.ID)
+		}
+		if arg2 == "other" {
+			return s.send("Напишите дату отправки, например 25.09.2026.", nil)
 		}
 		d := s.b.svc.ActToday(a)
 		if arg2 == "yesterday" {
@@ -182,6 +190,15 @@ func (s *session) callback(payload string) error {
 		return s.send(s.b.actLine(a), actKeyboard(s.b, a, s.b.svc.Config().DemoMode))
 	}
 	return s.menu()
+}
+
+// lowerFirst — первая буква строчная (по рунам: строки кириллические).
+func lowerFirst(s string) string {
+	r := []rune(s)
+	if len(r) == 0 {
+		return s
+	}
+	return strings.ToLower(string(r[0])) + string(r[1:])
 }
 
 func (s *session) act(id string) (store.Act, error) {
@@ -224,6 +241,9 @@ func (s *session) onFile(at model.Attachment) error {
 		return err
 	}
 	if !prof.Complete() {
+		if strings.HasPrefix(s.sess.State, "onb_") {
+			return s.send("Сначала закончим профиль — ответьте на вопрос выше. Акт пришлите сразу после этого.", nil)
+		}
 		return s.startOnboarding()
 	}
 	if at.Payload.URL == "" {

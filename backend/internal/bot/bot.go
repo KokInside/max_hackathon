@@ -15,6 +15,7 @@ import (
 
 	"priemka/internal/app"
 	"priemka/internal/maxbot"
+	"priemka/internal/rules"
 	"priemka/internal/store"
 )
 
@@ -78,6 +79,18 @@ func updateKey(u model.Update) string {
 
 func New(c *maxbot.Client, svc *app.Service, log *slog.Logger) *Bot {
 	return &Bot{c: c, svc: svc, log: log}
+}
+
+// Commands — команды для меню MAX; должны совпадать с обработкой в message().
+func Commands(demo bool) []maxbot.Command {
+	cmds := []maxbot.Command{
+		{Name: "menu", Description: "Текущий акт и главное меню"},
+		{Name: "help", Description: "Как работает приёмка акта"},
+	}
+	if demo {
+		cmds = append(cmds, maxbot.Command{Name: "demo", Description: "Демо: перемотать время демо-акта"})
+	}
+	return append(cmds, maxbot.Command{Name: "delete", Description: "Удалить мои данные"})
 }
 
 // Handle — точка входа для вебхука и long polling.
@@ -212,9 +225,10 @@ func (s *session) message(m model.MessageUpdate) error {
 
 func (s *session) start() error {
 	if s.user.ConsentAt == nil {
+		p := s.b.svc.Rules().Policy
 		return s.send("Здравствуйте! Я «Приёмка» — помощник председателя совета многоквартирного дома.\n\n"+
-			"С 01.09.2026 у совета есть 10 дней, чтобы подписать акт выполненных работ управляющей компании или направить обоснованный отказ. "+
-			"Если молчать 30 дней, акт считается принятым.\n\n"+
+			fmt.Sprintf("С 01.09.2026 у председателя или членов совета есть %d дней со дня получения акта выполненных работ от управляющей компании, чтобы вернуть подписанный экземпляр или направить обоснованный отказ. ", p.ResponseDays)+
+			fmt.Sprintf("Если за %d дней исполнитель не получит ни подписанного акта, ни отказа, акт считается оформленным со стороны совета.\n\n", p.SilentDays)+
 			"Я считаю сроки и напоминаю о них, проверяю сроки самой УК, помогаю проверить акт по строкам вместе с жильцами и готовлю PDF: письмо к подписанному акту или мотивированный отказ.\n\n"+
 			"Для работы я храню ваше имя, данные дома и акты. Жильцы, которые отвечают по ссылке, в документы по имени не попадают. Удалить данные — /delete.",
 			kb(row(cbBtn("✅ Согласен на обработку данных", "consent")), row(cbBtn("Подробнее", "help"))))
@@ -223,9 +237,10 @@ func (s *session) start() error {
 }
 
 func (s *session) help() error {
+	p := s.b.svc.Rules().Policy
 	return s.send("Как это работает:\n\n"+
 		"1. Заполните профиль: ФИО, дом, основание полномочий, управляющая компания.\n"+
-		"2. Получили акт от УК — пришлите его сюда файлом или фото и укажите дату получения. Я посчитаю 10-й и 30-й день и напомню о них.\n"+
+		fmt.Sprintf("2. Получили акт от УК — пришлите его сюда файлом или фото и укажите дату получения. Я посчитаю %d-й и %d-й день и напомню о них.\n", p.ResponseDays, p.SilentDays)+
 		"3. В мини-приложении отметьте по каждой строке: подтверждено, под сомнением или не выполнено, добавьте комментарий и фото.\n"+
 		"4. Отправьте ссылку жильцам — они отметят, что видели работы в своём подъезде.\n"+
 		"5. Сформируйте PDF: письмо к подписанному акту или обоснованный отказ. Отправьте его в УК сами и отметьте здесь способ и дату.\n\n"+
@@ -268,7 +283,8 @@ func (b *Bot) actLine(a store.Act) string {
 		d := b.svc.Rules().Policy.ComputeDeadlines(a.ReceivedOn)
 		switch {
 		case t.DaysLeftResponse >= 0:
-			s += fmt.Sprintf(" Ответить до %s (осталось %d дн.).", d.ResponseOn.Russian(), t.DaysLeftResponse)
+			s += fmt.Sprintf(" Ответить до %s (%s %d %s).", d.ResponseOn.Russian(),
+				rules.Plural(t.DaysLeftResponse, "остался", "осталось", "осталось"), t.DaysLeftResponse, rules.Plural(t.DaysLeftResponse, "день", "дня", "дней"))
 		case t.DaysLeftSilent >= 0:
 			s += fmt.Sprintf(" Срок ответа прошёл; молчаливая приёмка после %s.", d.SilentOn.Russian())
 		}

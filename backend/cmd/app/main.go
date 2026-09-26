@@ -229,6 +229,9 @@ func run() error {
 	if client != nil {
 		b := bot.New(client, svc, log)
 		svc.SetNotifier(b)
+		if err := client.SetCommands(ctx, bot.Commands(e.DemoMode)); err != nil {
+			log.Warn("MAX: не удалось опубликовать команды бота", "err", err)
+		}
 		switch e.BotMode {
 		case "webhook":
 			mux.Handle("POST /webhook", client.WebhookHandler(b.Handle, e.WebhookSecret))

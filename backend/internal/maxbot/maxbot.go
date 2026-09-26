@@ -57,8 +57,9 @@ func NewHTTPClient(extraCAFile string) (*http.Client, error) {
 	return &http.Client{Transport: tr, Timeout: 60 * time.Second}, nil
 }
 
-func New(ctx context.Context, token string, hc *http.Client, log *slog.Logger) (*Client, error) {
-	api, err := maxapi.NewApi(token, maxapi.WithHTTPClient(hc), maxapi.WithPollingTimeout(30*time.Second))
+// New подключается к Bot API и узнаёт id и ник бота. opts — для тестов (адрес поддельного сервера).
+func New(ctx context.Context, token string, hc *http.Client, log *slog.Logger, opts ...maxapi.Opt) (*Client, error) {
+	api, err := maxapi.NewApi(token, append([]maxapi.Opt{maxapi.WithHTTPClient(hc), maxapi.WithPollingTimeout(30 * time.Second)}, opts...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +259,21 @@ func (c *Client) Download(ctx context.Context, rawURL string) (io.ReadCloser, er
 		return nil, fmt.Errorf("скачивание вложения: HTTP %d", resp.StatusCode)
 	}
 	return resp.Body, nil
+}
+
+// Command — команда бота для меню MAX.
+type Command struct{ Name, Description string }
+
+// SetCommands публикует список команд: MAX показывает их в меню чата с ботом.
+func (c *Client) SetCommands(ctx context.Context, cmds []Command) error {
+	patch := model.BotPatchCommands{}
+	for _, cmd := range cmds {
+		patch.Commands = append(patch.Commands, model.BotCommand{Name: cmd.Name, Description: cmd.Description})
+	}
+	return c.do(ctx, "commands", func() error {
+		_, err := c.api.Bots.PatchCommands(ctx, patch)
+		return err
+	})
 }
 
 // Subscribe регистрирует вебхук. В проде это единственный способ получать события.

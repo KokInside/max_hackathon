@@ -61,6 +61,9 @@ func (s *session) onboardingText(text string) error {
 	case stAuthType:
 		return s.send("Выберите вариант кнопкой выше.", nil)
 	case stAuthDoc:
+		if len([]rune(text)) > 100 {
+			return s.send("Слишком длинно. Пример: 10.03.2026 № 1", nil)
+		}
 		if m := reDateNum.FindString(text); m != "" {
 			date, err := civil.Parse(m)
 			if err != nil {
@@ -74,7 +77,7 @@ func (s *session) onboardingText(text string) error {
 		}
 		return s.askAddress()
 	case stAddress:
-		if len([]rune(text)) < 8 {
+		if len([]rune(text)) < 8 || len([]rune(text)) > 300 {
 			return s.send("Напишите адрес полностью, например: г. Казань, ул. Баумана, д. 1", nil)
 		}
 		d["address"] = text
@@ -88,10 +91,16 @@ func (s *session) onboardingText(text string) error {
 		d["entrances"] = text
 		return next(stExecutor, "Шаг 7 из 8. Название управляющей компании (исполнителя), как в договоре.")
 	case stExecutor:
+		if len([]rune(text)) < 2 || len([]rune(text)) > 300 {
+			return s.send("Напишите название управляющей компании, например: ООО «УК Казань».", nil)
+		}
 		d["executor"] = text
 		return next(stContract, "Шаг 8 из 8. Номер и дата договора управления, например: 15/2025 от 15.01.2025. Если не знаете — нажмите «Пропустить».",
 			row(cbBtn("Пропустить", "skip")))
 	case stContract:
+		if len([]rune(text)) > 100 {
+			return s.send("Слишком длинно. Пример: 15/2025 от 15.01.2025 — или нажмите «Пропустить».", nil)
+		}
 		if m := reDateNum.FindString(text); m != "" {
 			if date, err := civil.Parse(m); err == nil {
 				d["contract_date"] = date.String()
