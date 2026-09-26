@@ -11,7 +11,9 @@ info:
     - `Authorization: Bearer <token>` — тестовые учётки для проверки API (роли chairman и resident), токены передаются организаторам вне репозитория;
     - `X-Dev-User` — только при локальном запуске с DEV_AUTH=true.
 
-    Все ошибки: `{"error": {"code", "message", "details"}, "request_id"}`. Суммы — строки с двумя знаками после точки («1234.50»), даты — «ГГГГ-ММ-ДД».
+    Все ошибки: `{"error": {"code", "message", "details"}, "request_id"}`. Кроме перечисленных у метода кодов возможны
+    405 (неверный HTTP-метод, заголовок Allow) и 429 (больше 10 запросов в секунду от пользователя, заголовок Retry-After) —
+    они описаны ответом `default`. Суммы — строки с двумя знаками после точки («1234.50»), даты — «ГГГГ-ММ-ДД».
 servers:
   - url: /api/v1
 security:
@@ -33,6 +35,7 @@ paths:
       summary: Текущий пользователь, профиль председателя, режим запуска
       operationId: getMe
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
         "401": { $ref: "#/components/responses/Error" }
   /me/profile:
@@ -42,6 +45,7 @@ paths:
       operationId: saveProfile
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProfileInput" } } } }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProfileBundle" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
@@ -53,6 +57,7 @@ paths:
       summary: Акты дома председателя (новые сверху)
       operationId: listActs
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200":
           description: OK
           content:
@@ -69,6 +74,7 @@ paths:
       summary: Создать демо-акт с синтетическими строками (только DEMO_MODE)
       operationId: createDemoAct
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "201": { description: Создан, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
@@ -79,6 +85,7 @@ paths:
       summary: Карточка акта
       operationId: getAct
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
@@ -89,6 +96,7 @@ paths:
       operationId: patchAct
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/HeaderPatch" } } } }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
@@ -104,6 +112,7 @@ paths:
       operationId: addLine
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LineInput" } } } }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "201": { description: Создана, content: { application/json: { schema: { $ref: "#/components/schemas/Line" } } } }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -116,6 +125,7 @@ paths:
       operationId: patchLine
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LineInput" } } } }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Line" } } } }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -126,6 +136,7 @@ paths:
       summary: Удалить строку
       operationId: deleteLine
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "204": { description: Удалена }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -147,6 +158,7 @@ paths:
                 note: { type: string, maxLength: 1000, description: "Передавать до поля file" }
                 file: { type: string, format: binary }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "201": { description: Сохранено, content: { application/json: { schema: { $ref: "#/components/schemas/Evidence" } } } }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -159,6 +171,7 @@ paths:
       summary: Удалить доказательство
       operationId: deleteEvidence
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "204": { description: Удалено }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -171,6 +184,7 @@ paths:
       summary: Получить или создать приглашение для жильцов (текстовый диплинк)
       operationId: createInvite
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "201":
           description: OK
           content:
@@ -192,6 +206,7 @@ paths:
       summary: Акт глазами жильца (без цен)
       operationId: getInvite
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ResidentView" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -204,6 +219,7 @@ paths:
       operationId: putVotes
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/VotesInput" } } } }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ResidentView" } } } }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -228,6 +244,7 @@ paths:
                 decision: { type: string, enum: [sign, refuse] }
                 confirm_disputed: { type: boolean, description: "Подтверждение подписания при спорных строках" }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "201": { description: Сформирован, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionResult" } } } }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -251,6 +268,7 @@ paths:
                 channel_note: { type: string }
                 sent_on: { type: [string, "null"], format: date, description: "По умолчанию — сегодня" }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -261,6 +279,7 @@ paths:
       summary: Новый акт после отправленного отказа (строки копируются, оспоренные помечаются)
       operationId: successor
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "201": { description: Создан, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
         "409": { $ref: "#/components/responses/Error" }
   /acts/{id}/demo-shift:
@@ -280,6 +299,7 @@ paths:
                 days: { type: integer, minimum: 1 }
                 to_day: { type: integer, minimum: 1, maximum: 60, description: "Перейти к N-му дню после получения" }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -293,6 +313,7 @@ paths:
       parameters:
         - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 100 } }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200":
           description: OK
           content:
@@ -313,6 +334,7 @@ paths:
       operationId: listRules
       security: []
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200":
           description: OK
           content:
@@ -336,6 +358,7 @@ paths:
         - { name: sig, in: query, required: true, schema: { type: string } }
         - { name: download, in: query, schema: { type: string, enum: ["1"] } }
       responses:
+        default: { $ref: "#/components/responses/Error" }
         "200": { description: Файл, content: { application/pdf: {}, image/jpeg: {}, image/png: {}, image/webp: {} } }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }

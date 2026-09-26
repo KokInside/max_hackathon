@@ -782,6 +782,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     saveProfile: {
@@ -809,6 +810,7 @@ export interface operations {
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     listActs: {
@@ -832,6 +834,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     createDemoAct: {
@@ -854,6 +857,7 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     getAct: {
@@ -879,6 +883,7 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     patchAct: {
@@ -911,6 +916,7 @@ export interface operations {
             409: components["responses"]["Error"];
             415: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     addLine: {
@@ -940,6 +946,7 @@ export interface operations {
             403: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     deleteLine: {
@@ -963,6 +970,7 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     patchLine: {
@@ -993,6 +1001,7 @@ export interface operations {
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     addEvidence: {
@@ -1028,6 +1037,7 @@ export interface operations {
             409: components["responses"]["Error"];
             413: components["responses"]["Error"];
             415: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     deleteEvidence: {
@@ -1051,6 +1061,7 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     createInvite: {
@@ -1083,6 +1094,7 @@ export interface operations {
             };
             403: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     getInvite: {
@@ -1108,6 +1120,7 @@ export interface operations {
             401: components["responses"]["Error"];
             404: components["responses"]["Error"];
             410: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     putVotes: {
@@ -1138,6 +1151,7 @@ export interface operations {
             409: components["responses"]["Error"];
             410: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     decide: {
@@ -1172,6 +1186,7 @@ export interface operations {
             403: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     dispatch: {
@@ -1208,6 +1223,7 @@ export interface operations {
             };
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     successor: {
@@ -1231,6 +1247,7 @@ export interface operations {
                 };
             };
             409: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     demoShift: {
@@ -1264,6 +1281,7 @@ export interface operations {
             403: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     searchWorks: {
@@ -1292,6 +1310,7 @@ export interface operations {
                 };
             };
             422: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
     listRules: {
@@ -1318,6 +1337,7 @@ export interface operations {
                     };
                 };
             };
+            default: components["responses"]["Error"];
         };
     };
     getFile: {
@@ -1349,6 +1369,7 @@ export interface operations {
             };
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
         };
     };
 }

@@ -16,10 +16,10 @@ import (
 
 // DecisionResult — сформированный документ и итог доставки в чат.
 type DecisionResult struct {
-	Document  store.Document `json:"document"`
-	URL       string         `json:"url"`
-	Delivered bool           `json:"delivered"`
-	Warning   string         `json:"warning,omitempty"`
+	Document  DocumentView `json:"document"`
+	URL       string       `json:"url"`
+	Delivered bool         `json:"delivered"`
+	Warning   string       `json:"warning,omitempty"`
 }
 
 // Decide проверяет решение, формирует PDF и отправляет его председателю ботом.
@@ -87,7 +87,8 @@ func (s *Service) Decide(ctx context.Context, userID, actID string, d domain.Dec
 		return DecisionResult{}, err
 	}
 
-	res := DecisionResult{Document: doc, URL: s.FileURL(doc.FileID)}
+	url := s.FileURL(doc.FileID)
+	res := DecisionResult{Document: DocumentView{Document: doc, URL: url}, URL: url}
 	if s.notify == nil {
 		res.Warning = "Бот не подключён: скачайте документ здесь."
 		return res, nil

@@ -111,13 +111,6 @@ func (q *Q) Documents(ctx context.Context, actID string) ([]Document, error) {
 	return out, rows.Err()
 }
 
-func (q *Q) DocumentByID(ctx context.Context, id string) (Document, error) {
-	var d Document
-	err := q.q.QueryRow(ctx, `SELECT id, act_id, kind, file_id, version, rules_version, max_message_id, created_at FROM documents WHERE id = $1`, id).
-		Scan(&d.ID, &d.ActID, &d.Kind, &d.FileID, &d.Version, &d.RulesVersion, &d.MaxMessageID, &d.CreatedAt)
-	return d, notFound(err)
-}
-
 type Dispatch struct {
 	ID          string     `json:"id"`
 	ActID       string     `json:"-"`

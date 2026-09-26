@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 
 	"priemka/internal/app"
@@ -162,7 +163,11 @@ func (a *API) addEvidence(w http.ResponseWriter, r *http.Request, u store.User) 
 			break
 		}
 		if err != nil {
-			return &app.Error{Status: http.StatusRequestEntityTooLarge, Code: "FILE_TOO_LARGE", Message: fmt.Sprintf("Файл больше %d МБ.", max>>20)}
+			var tooBig *http.MaxBytesError
+			if errors.As(err, &tooBig) {
+				return &app.Error{Status: http.StatusRequestEntityTooLarge, Code: "FILE_TOO_LARGE", Message: fmt.Sprintf("Файл больше %d МБ.", max>>20)}
+			}
+			return &app.Error{Status: http.StatusBadRequest, Code: "BAD_MULTIPART", Message: "Не удалось прочитать загрузку. Повторите."}
 		}
 		switch part.FormName() {
 		case "note":
@@ -358,13 +363,20 @@ func (a *API) file(w http.ResponseWriter, r *http.Request) error {
 	if name == "" {
 		name = "file"
 	}
-	w.Header().Set("Content-Disposition", mime.FormatMediaType(disp, map[string]string{"filename": name}))
+	cd := mime.FormatMediaType(disp, map[string]string{"filename": name})
+	if cd == "" { // имя с недопустимыми символами
+		cd = disp
+	}
+	w.Header().Set("Content-Disposition", cd)
 	http.ServeContent(w, r, "", st.ModTime(), fh)
 	return nil
 }
 
+var reUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// validID отсекает не-UUID до запроса к БД: несуществующий объект — 404.
 func validID(id string) error {
-	if len(id) != 36 || strings.Count(id, "-") != 4 {
+	if !reUUID.MatchString(id) {
 		return &app.Error{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Не найдено."}
 	}
 	return nil

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"priemka/internal/app"
@@ -27,17 +28,69 @@ type Config struct {
 	DevAuth     bool
 	// TestTokens — bearer-токен → max_user_id тестовой учётки.
 	TestTokens map[string]int64
+	// RateLimit и RateBurst — запросов в секунду на пользователя и допустимый всплеск (0 — по умолчанию 10 и 30).
+	RateLimit, RateBurst float64
 }
 
 type API struct {
-	cfg Config
-	svc *app.Service
-	log *slog.Logger
+	cfg     Config
+	svc     *app.Service
+	log     *slog.Logger
+	limiter *limiter
 }
 
 func New(cfg Config, svc *app.Service, log *slog.Logger) *API {
-	return &API{cfg: cfg, svc: svc, log: log}
+	if cfg.RateLimit <= 0 {
+		cfg.RateLimit = 10
+	}
+	if cfg.RateBurst <= 0 {
+		cfg.RateBurst = 30
+	}
+	return &API{cfg: cfg, svc: svc, log: log, limiter: newLimiter(cfg.RateLimit, cfg.RateBurst)}
 }
+
+// limiter — «ведро токенов» на пользователя: в среднем rate запросов в секунду, всплеск до burst.
+type limiter struct {
+	mu      sync.Mutex
+	rate    float64
+	burst   float64
+	buckets map[string]*bucket
+}
+
+type bucket struct {
+	tokens float64
+	last   time.Time
+}
+
+func newLimiter(rate, burst float64) *limiter {
+	return &limiter{rate: rate, burst: burst, buckets: map[string]*bucket{}}
+}
+
+func (l *limiter) allow(key string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.buckets) > 10000 { // забываем давно неактивных
+		for k, b := range l.buckets {
+			if now.Sub(b.last) > time.Minute {
+				delete(l.buckets, k)
+			}
+		}
+	}
+	b, ok := l.buckets[key]
+	if !ok {
+		b = &bucket{tokens: l.burst, last: now}
+		l.buckets[key] = b
+	}
+	b.tokens = min(l.burst, b.tokens+now.Sub(b.last).Seconds()*l.rate)
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+var methods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 
 type ctxKey int
 
@@ -74,6 +127,19 @@ func (a *API) Routes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/rules", a.wrap(a.rulesList))
 	mux.Handle("GET /api/v1/files/{id}", a.wrap(a.file))
 	mux.Handle("/api/", a.wrap(func(w http.ResponseWriter, r *http.Request) error {
+		// Путь существует, но с другим HTTP-методом — 405 с Allow, а не 404.
+		var allow []string
+		for _, m := range methods {
+			r2 := r.Clone(r.Context())
+			r2.Method = m
+			if _, p := mux.Handler(r2); p != "/api/" {
+				allow = append(allow, m)
+			}
+		}
+		if len(allow) > 0 {
+			w.Header().Set("Allow", strings.Join(allow, ", "))
+			return &app.Error{Status: http.StatusMethodNotAllowed, Code: "METHOD_NOT_ALLOWED", Message: "Метод " + r.Method + " для этого адреса не поддерживается."}
+		}
 		return &app.Error{Status: http.StatusNotFound, Code: "NOT_FOUND", Message: "Метод не найден."}
 	}))
 }
@@ -104,6 +170,14 @@ func (a *API) wrap(h func(w http.ResponseWriter, r *http.Request) error) http.Ha
 }
 
 func (a *API) authenticate(h func(w http.ResponseWriter, r *http.Request, u store.User) error) func(w http.ResponseWriter, r *http.Request) error {
+	next := h
+	h = func(w http.ResponseWriter, r *http.Request, u store.User) error {
+		if !a.limiter.allow(u.ID, time.Now()) {
+			w.Header().Set("Retry-After", "1")
+			return &app.Error{Status: http.StatusTooManyRequests, Code: "RATE_LIMITED", Message: "Слишком много запросов. Повторите через секунду."}
+		}
+		return next(w, r, u)
+	}
 	return func(w http.ResponseWriter, r *http.Request) error {
 		ctx := r.Context()
 		unauth := &app.Error{Status: http.StatusUnauthorized, Code: "UNAUTHORIZED", Message: "Откройте приложение из чата с ботом в MAX."}
@@ -174,6 +248,9 @@ func decode(r *http.Request, v any) error {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		return &app.Error{Status: http.StatusBadRequest, Code: "BAD_JSON", Message: "Некорректный JSON: " + err.Error()}
+	}
+	if dec.More() {
+		return &app.Error{Status: http.StatusBadRequest, Code: "BAD_JSON", Message: "Некорректный JSON: лишние данные после объекта."}
 	}
 	return nil
 }
