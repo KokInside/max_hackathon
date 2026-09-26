@@ -6,9 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -39,7 +43,26 @@ func getenv(k, def string) string {
 	return def
 }
 
+// defaultFilesSecret — значение из compose.yaml для локального запуска; в проде недопустимо.
+const defaultFilesSecret = "local-files-secret-change-me"
+
+var reWebhookSecret = regexp.MustCompile(`^[A-Za-z0-9_-]{16,256}$`)
+
+// getbool разбирает логический флаг строго: опечатка не должна молча выключать режим.
+func getbool(k string, def bool, errs *[]error) bool {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		*errs = append(*errs, fmt.Errorf("%s=%q: ожидается true или false", k, v))
+	}
+	return b
+}
+
 func loadEnv() (env, error) {
+	var errs []error
 	e := env{
 		BotToken:      os.Getenv("MAX_BOT_TOKEN"),
 		BotMode:       getenv("BOT_MODE", "off"),
@@ -54,12 +77,11 @@ func loadEnv() (env, error) {
 		ExtraCA:       getenv("EXTRA_CA_FILE", ""),
 		HTTPAddr:      getenv("HTTP_ADDR", ":8080"),
 		TestAccounts:  os.Getenv("TEST_ACCOUNTS"),
-		DemoMode:      getenv("DEMO_MODE", "false") == "true",
-		DevAuth:       getenv("DEV_AUTH", "false") == "true",
+		DemoMode:      getbool("DEMO_MODE", false, &errs),
+		DevAuth:       getbool("DEV_AUTH", false, &errs),
 		// Разрешить long polling снять зарегистрированный вебхук (по умолчанию — нет: это отключит прод-бота).
-		PollingTakeover: getenv("POLLING_TAKEOVER", "false") == "true",
+		PollingTakeover: getbool("POLLING_TAKEOVER", false, &errs),
 	}
-	var errs []error
 	var err error
 	if e.InitDataTTL, err = time.ParseDuration(getenv("INIT_DATA_TTL", "24h")); err != nil {
 		errs = append(errs, fmt.Errorf("INIT_DATA_TTL: %w", err))
@@ -83,14 +105,24 @@ func loadEnv() (env, error) {
 		errs = append(errs, fmt.Errorf("BOT_MODE=%q: ожидается off, polling или webhook", e.BotMode))
 	}
 	if e.BotMode == "webhook" {
-		if !strings.HasPrefix(e.PublicURL, "https://") {
-			errs = append(errs, errors.New("BOT_MODE=webhook требует PUBLIC_URL вида https://домен"))
+		// MAX принимает вебхук только по HTTPS на порту 443.
+		u, err := url.Parse(e.PublicURL)
+		if err != nil || u.Scheme != "https" || u.Host == "" || (u.Port() != "" && u.Port() != "443") || (u.Path != "" && u.Path != "/") {
+			errs = append(errs, errors.New("BOT_MODE=webhook требует PUBLIC_URL вида https://домен (порт 443, без пути)"))
 		}
-		if len(e.WebhookSecret) < 16 {
-			errs = append(errs, errors.New("BOT_MODE=webhook требует WEBHOOK_SECRET (16+ символов [A-Za-z0-9_-])"))
+		if !reWebhookSecret.MatchString(e.WebhookSecret) {
+			errs = append(errs, errors.New("BOT_MODE=webhook требует WEBHOOK_SECRET: 16–256 символов A-Z, a-z, 0-9, _ и -"))
 		}
 		if e.DevAuth {
 			errs = append(errs, errors.New("DEV_AUTH=true запрещён в проде (BOT_MODE=webhook)"))
+		}
+		if e.FilesSecret == defaultFilesSecret {
+			errs = append(errs, errors.New("в проде задайте свой FILES_SECRET: значение по умолчанию из compose.yaml известно всем"))
+		}
+		if u, err := url.Parse(e.DatabaseURL); err == nil {
+			if p, _ := u.User.Password(); p == "priemka" {
+				errs = append(errs, errors.New("в проде задайте свой POSTGRES_PASSWORD: пароль по умолчанию известен всем"))
+			}
 		}
 	}
 	if e.BotToken == "" && !e.DevAuth && e.TestAccounts == "" {
@@ -110,6 +142,9 @@ func parseTestAccounts(s string) (map[string]int64, error) {
 		role, tok, ok := strings.Cut(pair, ":")
 		if !ok || len(tok) < 16 {
 			return nil, fmt.Errorf("TEST_ACCOUNTS: ожидается роль:токен (токен 16+ символов)")
+		}
+		if _, dup := out[tok]; dup {
+			return nil, fmt.Errorf("TEST_ACCOUNTS: один токен у двух ролей")
 		}
 		switch role {
 		case "chairman":
@@ -226,6 +261,21 @@ func run() error {
 		fmt.Fprintf(w, `{"status":"ok","rules_version":%q,"bot_mode":%q}`, rs.Version, e.BotMode)
 	})
 
+	// Порт открывается до подписки на вебхук: MAX может прислать событие сразу после подписки.
+	ln, err := net.Listen("tcp", e.HTTPAddr)
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      2 * time.Minute,
+		IdleTimeout:       time.Minute,
+	}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.Serve(ln) }()
+
 	if client != nil {
 		b := bot.New(client, svc, log)
 		svc.SetNotifier(b)
@@ -257,26 +307,19 @@ func run() error {
 		}
 	}
 	go svc.RunScheduler(ctx, time.Minute)
-
-	srv := &http.Server{
-		Addr:              e.HTTPAddr,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       2 * time.Minute,
-		WriteTimeout:      2 * time.Minute,
-		IdleTimeout:       time.Minute,
-	}
-	go func() {
-		<-ctx.Done()
-		sh, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(sh)
-	}()
 	log.Info("HTTP", "addr", e.HTTPAddr, "demo_mode", e.DemoMode, "dev_auth", e.DevAuth, "test_accounts", len(testTokens))
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+
+	select {
+	case err := <-serveErr:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-ctx.Done():
 	}
-	return nil
+	sh, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return srv.Shutdown(sh)
 }
 
 // openStore ждёт готовности БД при старте контейнеров.
