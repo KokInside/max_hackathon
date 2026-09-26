@@ -1,0 +1,128 @@
+# Правила приёмки актов советом МКД.
+# Каждое правило ссылается на источник. kind:
+#   norm           — прямо следует из нормативного акта;
+#   calculation    — расчёт сервиса на основе норм;
+#   recommendation — рекомендация сервиса, не норма;
+#   assumption     — допущение, которое нужно сверить (показывается пользователю как допущение).
+# Пункт акта (point) указывается только после сверки с первоисточником; до этого — null,
+# и в документах ссылка идёт на акт целиком.
+
+version: "2026-09-25.2"
+
+sources:
+  minstroy_318:
+    title: "Порядок приёмки оказанных услуг и (или) выполненных работ по содержанию и текущему ремонту общего имущества в многоквартирном доме, утв. приказом Минстроя России от 22.05.2026 № 318/пр"
+    short: "приказ Минстроя России № 318/пр"
+    cite: "приказом Минстроя России от 22.05.2026 № 318/пр"
+    edition: "исходная редакция"
+    effective_from: 2026-09-01
+    effective_to: 2032-09-01
+    url: "https://minstroyrf.gov.ru/docs/483163/"
+    checked_at: 2026-09-25
+    verified: false
+  minstroy_761:
+    title: "Форма акта приёмки оказанных услуг и (или) выполненных работ по содержанию и текущему ремонту общего имущества в многоквартирном доме, утв. приказом Минстроя России от 26.10.2015 № 761/пр"
+    short: "приказ Минстроя России № 761/пр"
+    cite: "приказом Минстроя России от 26.10.2015 № 761/пр"
+    edition: "исходная редакция (опубл. pravo.gov.ru 05.02.2016)"
+    effective_from: 2016-02-16
+    url: "https://www.consultant.ru/document/cons_doc_LAW_193489/"
+    checked_at: 2026-09-22
+    verified: true
+  pp_290:
+    title: "Минимальный перечень услуг и работ, необходимых для обеспечения надлежащего содержания общего имущества в многоквартирном доме, утв. постановлением Правительства РФ от 03.04.2013 № 290"
+    short: "ПП РФ № 290"
+    cite: "постановлением Правительства РФ от 03.04.2013 № 290"
+    edition: "в ред. постановления Правительства РФ от 07.03.2025 № 293 (по выгрузке КонсультантПлюс; сверить с pravo.gov.ru)"
+    effective_from: 2013-04-12
+    effective_to: 2029-09-01
+    url: "http://publication.pravo.gov.ru/"
+    checked_at: 2026-09-25
+    verified: false
+  minstroy_letter_50270:
+    title: "Письмо Минстроя России от 13.08.2026 № 50270-ДН/04 (по пересказу, текст не сверен)"
+    short: "письмо Минстроя № 50270-ДН/04"
+    cite: "письмом Минстроя России от 13.08.2026 № 50270-ДН/04"
+    edition: "—"
+    url: "https://www.consultant.ru/legalnews/32343/"
+    checked_at: 2026-09-25
+    verified: false
+
+params:
+  # calendar | working. В MVP поддерживаются только календарные дни.
+  day_type: calendar
+  # next_day — день 1 наступает на следующий день после получения. ASSUMPTION.
+  counting_start: next_day
+  # Перенос окончания срока с нерабочего дня. ASSUMPTION: не применяется; true в MVP не поддерживается.
+  shift_if_non_working: false
+  timezone: Europe/Moscow
+  # Час (по timezone), в который бот присылает напоминание в день срока.
+  reminder_hour: 10
+
+rules:
+  - id: council_response_days
+    kind: norm
+    value: 10
+    source: minstroy_318
+    point: null
+    summary: "В течение 10 дней со дня получения председатель или члены совета возвращают один подписанный экземпляр либо направляют письменный обоснованный отказ с аргументированными возражениями."
+  - id: silent_acceptance_days
+    kind: norm
+    value: 30
+    source: minstroy_318
+    point: null
+    summary: "Если за 30 дней со дня получения не поступил ни подписанный акт, ни отказ, акт считается оформленным со стороны совета."
+  - id: executor_drafting_max_days
+    kind: norm
+    value: 30
+    source: minstroy_318
+    point: null
+    summary: "Исполнитель оформляет акт в срок по договору управления, но не более 30 дней со дня оказания услуг и не позже даты окончания договора."
+  - id: executor_sending_max_days
+    kind: norm
+    value: 5
+    source: minstroy_318
+    point: null
+    summary: "Исполнитель направляет оба подписанных экземпляра не позднее 5 дней со дня оформления акта согласованным способом, позволяющим подтвердить получение."
+  - id: copies_required
+    kind: norm
+    value: 2
+    source: minstroy_318
+    point: null
+    summary: "Акт оформляется в двух экземплярах: для исполнителя и для председателя или членов совета."
+  - id: new_act_after_refusal
+    kind: norm
+    source: minstroy_318
+    point: null
+    summary: "При отказе оформляется новый акт по тем же правилам; до него возможны согласительное совещание и осмотр общего имущества."
+  - id: form_has_no_remarks_option
+    kind: norm
+    source: minstroy_761
+    point: null
+    summary: "В форме акта нет графы «подписано с замечаниями»: подписание означает согласие с п. 3 (работы выполнены полностью, в срок, качественно) и п. 4 (претензий нет)."
+  - id: counting_starts_next_day
+    kind: assumption
+    summary: "Срок считается в календарных днях; первый день — следующий за днём получения. В приказе сказано просто «дней»."
+  - id: service_day_is_period_end
+    kind: assumption
+    summary: "«День оказания услуг» принимается равным последнему дню периода из п. 2 акта."
+  - id: applicability_scope
+    kind: norm
+    source: minstroy_318
+    point: null
+    summary: "Порядок применяется только там, где совет МКД обязателен и председатель наделён полномочиями подписывать акты (доверенности собственников либо решение общего собрания)."
+  - id: applicability_from
+    kind: assumption
+    value: 2026-09-01
+    source: minstroy_letter_50270
+    summary: "Порядок применяется к работам, выполненным с 01.09.2026 (по пересказу письма Минстроя; текст письма не сверен)."
+
+# Напоминания: день срока (от даты получения) → шаблон сообщения бота.
+reminders:
+  - { day: 7, kind: d7, template: remind_3_days_left }
+  - { day: 9, kind: d9, template: remind_tomorrow_last }
+  - { day: 10, kind: d10, template: remind_today_last }
+  - { day: 11, kind: d11, template: remind_response_overdue }
+  - { day: 25, kind: d25, template: remind_silent_soon }
+  - { day: 30, kind: d30, template: remind_silent_tomorrow }
+  - { day: 31, kind: d31, template: silent_acceptance_happened }

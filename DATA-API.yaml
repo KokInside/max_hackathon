@@ -1,0 +1,124 @@
+# Описание обязательных проверок собственного API «Приёмка» (ТЗ трека «Умный город», раздел «Формат сдачи»).
+# ASSUMPTION: организаторы не опубликовали схему файла; структура повторяет перечень полей из ТЗ.
+# Токены тестовых учёток в репозиторий не кладутся: они указаны на первом слайде презентации.
+# Прогон всех проверок: scripts/check-api.sh <BASE_URL> <CHAIRMAN_TOKEN> <RESIDENT_TOKEN>
+
+schema_version: "1.0"
+solution: "Приёмка — рабочее место председателя совета МКД (бот t84_hakaton_max_bot)"
+base_url: "https://<домен>/api/v1"   # заменить на адрес прода перед сдачей
+openapi: "api/openapi.yaml"
+
+roles:
+  chairman:
+    description: "Председатель совета МКД: демо-дом, демо-акт на проверке, приглашение жильцов"
+    auth: { type: header, name: Authorization, value: "Bearer <CHAIRMAN_TOKEN>" }
+  resident:
+    description: "Жилец дома: отвечает по ссылке-приглашению"
+    auth: { type: header, name: Authorization, value: "Bearer <RESIDENT_TOKEN>" }
+
+# {act_id}, {line_id}, {invite_token} берутся из ответов предыдущих проверок (поле save).
+checks:
+  - id: me
+    method: GET
+    path: /me
+    role: chairman
+    expected_status: [200]
+    response: { content_type: application/json, required: [user, profile, house, mode, profile_complete] }
+
+  - id: acts_list
+    method: GET
+    path: /acts
+    role: chairman
+    expected_status: [200]
+    response: { content_type: application/json, required: [acts] }
+    save: { act_id: "acts[0].id" }
+
+  - id: act_view
+    method: GET
+    path: /acts/{act_id}
+    role: chairman
+    expected_status: [200]
+    response:
+      content_type: application/json
+      required: [act, status_title, deadlines, checks, sums, lines, documents, events]
+    save: { line_id: "lines[0].id" }
+
+  - id: act_view_unauthorized
+    method: GET
+    path: /acts/{act_id}
+    role: none
+    expected_status: [401]
+    response: { content_type: application/json, required: [error.code, error.message, request_id] }
+
+  - id: act_view_foreign
+    method: GET
+    path: /acts/{act_id}
+    role: resident
+    expected_status: [403]
+    response: { content_type: application/json, required: [error.code] }
+
+  - id: line_review
+    method: PATCH
+    path: /lines/{line_id}
+    role: chairman
+    headers: { Content-Type: application/json }
+    body: { review_status: not_done, comment: "Проверка API: работа не выполнена" }
+    expected_status: [200, 409]
+    response: { content_type: application/json, required: [id, review_status, amount] }
+
+  - id: line_review_invalid
+    method: PATCH
+    path: /lines/{line_id}
+    role: chairman
+    headers: { Content-Type: application/json }
+    body: { review_status: maybe }
+    expected_status: [422, 409]
+    response: { content_type: application/json, required: [error.code] }
+
+  - id: catalog
+    method: GET
+    path: /catalog/works
+    query: { q: "мытье окон" }
+    role: chairman
+    expected_status: [200]
+    response: { content_type: application/json, required: [items, edition] }
+
+  - id: invite
+    method: POST
+    path: /acts/{act_id}/invites
+    role: chairman
+    expected_status: [201, 409]
+    response: { content_type: application/json, required: [token, link, text] }
+    save: { invite_token: token }
+
+  - id: resident_view
+    method: GET
+    path: /invites/{invite_token}
+    role: resident
+    expected_status: [200]
+    response: { content_type: application/json, required: [address, entrances_count, lines, open] }
+
+  - id: resident_votes
+    method: PUT
+    path: /invites/{invite_token}/votes
+    role: resident
+    headers: { Content-Type: application/json }
+    body: { consent: true, entrance_no: 1, votes: [{ line_id: "{line_id}", answer: "no", comment: "Проверка API" }] }
+    expected_status: [200, 409, 422]
+    response: { content_type: application/json }
+
+  - id: decision_refuse
+    method: POST
+    path: /acts/{act_id}/decision
+    role: chairman
+    headers: { Content-Type: application/json }
+    body: { decision: refuse }
+    expected_status: [201, 409]
+    response: { content_type: application/json, required: [document.id, document.kind, url, delivered] }
+
+  - id: rules
+    method: GET
+    path: /rules
+    role: none
+    expected_status: [200]
+    response: { content_type: application/json, required: [version, rules, params] }

@@ -1,0 +1,12 @@
+.git
+.claude
+.env
+.env.*
+!.env.example
+docs
+**/node_modules
+**/dist
+backend/bin
+*.log
+demo
+README.md

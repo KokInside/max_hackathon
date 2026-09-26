@@ -1,0 +1,25 @@
+{
+  "_note": "СИНТЕТИЧЕСКИЕ ДАННЫЕ для демонстрации. Дом, организация, люди и цены вымышлены. Наименования работ взяты из минимального перечня ПП РФ № 290 (config/catalog/pp290.json). Даты рассчитываются при создании: период — прошлый календарный месяц, дата акта — за 8 дней до даты создания.",
+  "house": { "city": "Демоград", "address": "г. Демоград, ул. Тестовая, д. 1 (ДЕМО)", "entrances_count": 4 },
+  "chairman": { "full_name": "Демо Председатель", "apartment_no": "12", "authority_type": "oss_decision", "authority_date": "2026-03-10", "authority_number": "1" },
+  "contract": { "type": "management", "number": "Д-1", "date": "2025-01-15", "end_date": "2027-12-31", "executor_name": "ООО «УК Пример» (вымышленная организация)" },
+  "act": {
+    "number": "17",
+    "act_date_offset_days": -8,
+    "executor_signatory_name": "Образцов О. О.",
+    "executor_signatory_position": "генеральный директор",
+    "executor_basis": "Устава",
+    "total_amount": "69350.00",
+    "total_amount_words": "шестьдесят девять тысяч триста пятьдесят рублей 00 копеек"
+  },
+  "lines": [
+    { "work_name": "Сухая и влажная уборка лестничных площадок и маршей", "pp290_ref": "п. 23, абз. 2", "periodicity_qty": "ежедневно, кроме выходных", "unit": "м²", "unit_price": "1.85", "amount": "18500.00" },
+    { "work_name": "Мытьё окон в подъездах", "pp290_ref": "п. 23, абз. 4", "periodicity_qty": "1 раз", "unit": "м²", "unit_price": "45.00", "amount": "4500.00" },
+    { "work_name": "Дератизация и дезинсекция подвала", "pp290_ref": "п. 23, абз. 6", "periodicity_qty": "1 раз", "unit": "м²", "unit_price": "3.20", "amount": "3200.00", "resident_visible": false },
+    { "work_name": "Подметание и уборка придомовой территории", "pp290_ref": "п. 25, абз. 2", "periodicity_qty": "ежедневно", "unit": "м²", "unit_price": "0.95", "amount": "14250.00" },
+    { "work_name": "Уборка и выкашивание газонов", "pp290_ref": "п. 25, абз. 4", "periodicity_qty": "2 раза", "unit": "м²", "unit_price": "2.50", "amount": "6000.00" },
+    { "work_name": "Очистка кровли от скопления снега и наледи", "pp290_ref": "п. 7, абз. 10", "periodicity_qty": "1 раз", "unit": "м²", "unit_price": "12.00", "amount": "9600.00" },
+    { "work_name": "Проверка тяги в дымовых и вентиляционных каналах", "pp290_ref": "п. 15(1), абз. 3", "periodicity_qty": "72 квартиры", "unit": "кв.", "unit_price": "150.00", "amount": "10800.00", "resident_visible": false },
+    { "work_name": "Проверка состояния помещений подвалов и приямков", "pp290_ref": "п. 2, абз. 3", "periodicity_qty": "1 осмотр", "unit": "осмотр", "unit_price": "2500.00", "amount": "2500.00", "resident_visible": false }
+  ]
+}

@@ -1,0 +1,72 @@
+# Запуск всех компонентов: docker compose up --build
+# Локально по умолчанию: бот выключен (BOT_MODE=off), мини-приложение и API на http://localhost:8080,
+# вход в API — заголовком X-Dev-User (DEV_AUTH=true). Прод: см. README, раздел «Развёртывание».
+name: priemka
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: priemka
+      POSTGRES_USER: priemka
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-priemka}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U priemka -d priemka"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://priemka:${POSTGRES_PASSWORD:-priemka}@db:5432/priemka?sslmode=disable
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      BOT_MODE: ${BOT_MODE:-off}
+      BOT_USERNAME: ${BOT_USERNAME:-t84_hakaton_max_bot}
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      FILES_SECRET: ${FILES_SECRET:-local-files-secret-change-me}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      DEV_AUTH: ${DEV_AUTH:-true}
+      TEST_ACCOUNTS: ${TEST_ACCOUNTS:-}
+      INIT_DATA_TTL: ${INIT_DATA_TTL:-24h}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - files:/data/files
+
+  web:
+    build:
+      context: .
+      dockerfile: webapp/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      # Локально «:80» (HTTP). В проде — домен: Caddy сам получит сертификат Let's Encrypt.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - caddy-data:/data
+
+networks:
+  default:
+    driver_opts:
+      # Если хост ходит в интернет через VPN с меньшим MTU (например, 1376), TLS к MAX зависает — уменьшите.
+      com.docker.network.driver.mtu: ${DOCKER_MTU:-1500}
+
+volumes:
+  db-data:
+  files:
+  caddy-data:

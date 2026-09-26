@@ -1,0 +1,765 @@
+openapi: 3.1.0
+info:
+  title: Приёмка — API мини-приложения
+  version: 1.0.0
+  description: |
+    API мини-приложения «Приёмка» (бот t84_hakaton_max_bot в MAX): проверка председателем совета МКД
+    актов выполненных работ управляющей компании по порядку, утверждённому приказом Минстроя России № 318/пр.
+
+    Аутентификация (одна из схем):
+    - `X-Max-Init-Data` — строка `window.WebApp.initData` из MAX Bridge; подпись проверяется сервером (HMAC-SHA256, ключ из токена бота);
+    - `Authorization: Bearer <token>` — тестовые учётки для проверки API (роли chairman и resident), токены передаются организаторам вне репозитория;
+    - `X-Dev-User` — только при локальном запуске с DEV_AUTH=true.
+
+    Все ошибки: `{"error": {"code", "message", "details"}, "request_id"}`. Суммы — строки с двумя знаками после точки («1234.50»), даты — «ГГГГ-ММ-ДД».
+servers:
+  - url: /api/v1
+security:
+  - initData: []
+  - bearer: []
+
+tags:
+  - name: me
+  - name: acts
+  - name: lines
+  - name: residents
+  - name: decision
+  - name: reference
+
+paths:
+  /me:
+    get:
+      tags: [me]
+      summary: Текущий пользователь, профиль председателя, режим запуска
+      operationId: getMe
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+  /me/profile:
+    put:
+      tags: [me]
+      summary: Сохранить профиль председателя, дом и договор
+      operationId: saveProfile
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProfileInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProfileBundle" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /acts:
+    get:
+      tags: [acts]
+      summary: Акты дома председателя (новые сверху)
+      operationId: listActs
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [acts]
+                properties:
+                  acts: { type: array, items: { $ref: "#/components/schemas/ActSummary" } }
+        "401": { $ref: "#/components/responses/Error" }
+  /acts/demo:
+    post:
+      tags: [acts]
+      summary: Создать демо-акт с синтетическими строками (только DEMO_MODE)
+      operationId: createDemoAct
+      responses:
+        "201": { description: Создан, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /acts/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [acts]
+      summary: Карточка акта
+      operationId: getAct
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [acts]
+      summary: Изменить шапку акта (поля формы 761/пр) и сведения о получении
+      operationId: patchAct
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/HeaderPatch" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /acts/{id}/lines:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [lines]
+      summary: Добавить строку акта
+      operationId: addLine
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LineInput" } } } }
+      responses:
+        "201": { description: Создана, content: { application/json: { schema: { $ref: "#/components/schemas/Line" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /lines/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    patch:
+      tags: [lines]
+      summary: Изменить строку, её статус, комментарий, оспариваемую сумму
+      operationId: patchLine
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LineInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Line" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [lines]
+      summary: Удалить строку
+      operationId: deleteLine
+      responses:
+        "204": { description: Удалена }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /lines/{id}/evidence:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [lines]
+      summary: Прикрепить фото или PDF как доказательство (до 10 МБ)
+      operationId: addEvidence
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                note: { type: string, maxLength: 1000, description: "Передавать до поля file" }
+                file: { type: string, format: binary }
+      responses:
+        "201": { description: Сохранено, content: { application/json: { schema: { $ref: "#/components/schemas/Evidence" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+  /evidence/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    delete:
+      tags: [lines]
+      summary: Удалить доказательство
+      operationId: deleteEvidence
+      responses:
+        "204": { description: Удалено }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /acts/{id}/invites:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [residents]
+      summary: Получить или создать приглашение для жильцов (текстовый диплинк)
+      operationId: createInvite
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, link, text, expires_at]
+                properties:
+                  token: { type: string }
+                  link: { type: string, example: "https://max.ru/t84_hakaton_max_bot?startapp=inv_7Qv7LXmjUv1atidE" }
+                  text: { type: string, description: Готовый текст для пересылки в чат дома }
+                  expires_at: { type: string, format: date-time }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /invites/{token}:
+    parameters: [{ $ref: "#/components/parameters/Token" }]
+    get:
+      tags: [residents]
+      summary: Акт глазами жильца (без цен)
+      operationId: getInvite
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ResidentView" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+  /invites/{token}/votes:
+    parameters: [{ $ref: "#/components/parameters/Token" }]
+    put:
+      tags: [residents]
+      summary: Ответы жильца по строкам своего подъезда
+      operationId: putVotes
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/VotesInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ResidentView" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /acts/{id}/decision:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [decision]
+      summary: Сформировать PDF — сопроводительное письмо (sign) или мотивированный отказ (refuse); бот пришлёт файл в чат
+      operationId: decide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              additionalProperties: false
+              properties:
+                decision: { type: string, enum: [sign, refuse] }
+                confirm_disputed: { type: boolean, description: "Подтверждение подписания при спорных строках" }
+      responses:
+        "201": { description: Сформирован, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionResult" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /acts/{id}/dispatch:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [decision]
+      summary: Отметить отправку документа исполнителю
+      operationId: dispatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              additionalProperties: false
+              properties:
+                channel: { $ref: "#/components/schemas/Channel" }
+                channel_note: { type: string }
+                sent_on: { type: [string, "null"], format: date, description: "По умолчанию — сегодня" }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /acts/{id}/successor:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [decision]
+      summary: Новый акт после отправленного отказа (строки копируются, оспоренные помечаются)
+      operationId: successor
+      responses:
+        "201": { description: Создан, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+  /acts/{id}/demo-shift:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [decision]
+      summary: Демо-режим — перемотать время демо-акта вперёд
+      operationId: demoShift
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                days: { type: integer, minimum: 1 }
+                to_day: { type: integer, minimum: 1, maximum: 60, description: "Перейти к N-му дню после получения" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActView" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /catalog/works:
+    get:
+      tags: [reference]
+      summary: Подсказки из минимального перечня работ (ПП РФ № 290)
+      operationId: searchWorks
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 100 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, edition, note]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CatalogItem" } }
+                  source: { $ref: "#/components/schemas/Source" }
+                  edition: { type: string }
+                  note: { type: string }
+        "422": { $ref: "#/components/responses/Error" }
+  /rules:
+    get:
+      tags: [reference]
+      summary: Действующие правила и их источники
+      operationId: listRules
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, rules, params]
+                properties:
+                  version: { type: string }
+                  rules: { type: array, items: { $ref: "#/components/schemas/Basis" } }
+                  params: { type: object, additionalProperties: { type: string } }
+  /files/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [reference]
+      summary: Файл по подписанной ссылке (ссылки приходят в карточке акта)
+      operationId: getFile
+      security: []
+      parameters:
+        - { name: exp, in: query, required: true, schema: { type: string } }
+        - { name: sig, in: query, required: true, schema: { type: string } }
+        - { name: download, in: query, schema: { type: string, enum: ["1"] } }
+      responses:
+        "200": { description: Файл, content: { application/pdf: {}, image/jpeg: {}, image/png: {}, image/webp: {} } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    initData: { type: apiKey, in: header, name: X-Max-Init-Data }
+    bearer: { type: http, scheme: bearer }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Token: { name: token, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{16}$" } }
+  responses:
+    Error:
+      description: Ошибка
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: ACT_LOCKED }
+            message: { type: string }
+            details: { type: [object, "null"] }
+        request_id: { type: string }
+    Money: { type: string, pattern: "^-?\\d+\\.\\d{2}$", example: "9600.00" }
+    Date: { type: [string, "null"], format: date }
+    Kind: { type: string, enum: [norm, calculation, recommendation, assumption] }
+    Severity: { type: string, enum: [ok, info, warning, violation] }
+    Channel: { type: string, enum: [post, email, executor_portal, in_person, other] }
+    Status: { type: string, enum: [draft, in_review, decided, closed_signed, refused_sent, deemed_accepted, replaced] }
+    ReviewStatus: { type: string, enum: [unchecked, confirmed, doubtful, not_done] }
+    Source:
+      type: object
+      required: [id, title, short, cite, edition, url, checked_at, verified]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        short: { type: string }
+        cite: { type: string }
+        edition: { type: string }
+        effective_from: { type: string }
+        effective_to: { type: string }
+        url: { type: string }
+        checked_at: { type: string }
+        verified: { type: boolean }
+    Basis:
+      type: object
+      required: [rule_id, kind, summary, source, point]
+      properties:
+        rule_id: { type: string }
+        kind: { $ref: "#/components/schemas/Kind" }
+        summary: { type: string }
+        source: { oneOf: [{ $ref: "#/components/schemas/Source" }, { type: "null" }] }
+        point: { type: [string, "null"] }
+    Claim:
+      type: object
+      required: [code, kind, severity, text, basis]
+      properties:
+        code: { type: string }
+        kind: { $ref: "#/components/schemas/Kind" }
+        severity: { $ref: "#/components/schemas/Severity" }
+        text: { type: string }
+        basis: { type: array, items: { $ref: "#/components/schemas/Basis" } }
+    User:
+      type: object
+      required: [id, max_user_id, first_name, last_name, consent_at]
+      properties:
+        id: { type: string, format: uuid }
+        max_user_id: { type: integer }
+        first_name: { type: string }
+        last_name: { type: string }
+        consent_at: { type: [string, "null"], format: date-time }
+    Profile:
+      type: object
+      required: [house_id, full_name, apartment_no, authority_type, authority_date, authority_number, applicability_confirmed]
+      properties:
+        house_id: { type: [string, "null"] }
+        full_name: { type: string }
+        apartment_no: { type: string }
+        authority_type: { type: string, enum: ["", oss_decision, power_of_attorney] }
+        authority_date: { $ref: "#/components/schemas/Date" }
+        authority_number: { type: string }
+        applicability_confirmed: { type: [boolean, "null"] }
+    House:
+      type: object
+      required: [id, city, address, entrances_count, timezone, council_chat_id, is_demo]
+      properties:
+        id: { type: string, format: uuid }
+        city: { type: string }
+        address: { type: string }
+        entrances_count: { type: integer }
+        timezone: { type: string }
+        council_chat_id: { type: [integer, "null"] }
+        is_demo: { type: boolean }
+    Contract:
+      type: object
+      required: [id, type, number, date, end_date, executor_name]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [management, services, repair] }
+        number: { type: string }
+        date: { $ref: "#/components/schemas/Date" }
+        end_date: { $ref: "#/components/schemas/Date" }
+        executor_name: { type: string }
+    ProfileBundle:
+      type: object
+      required: [user, profile, house, contract]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        profile: { oneOf: [{ $ref: "#/components/schemas/Profile" }, { type: "null" }] }
+        house: { oneOf: [{ $ref: "#/components/schemas/House" }, { type: "null" }] }
+        contract: { oneOf: [{ $ref: "#/components/schemas/Contract" }, { type: "null" }] }
+    Me:
+      allOf:
+        - $ref: "#/components/schemas/ProfileBundle"
+        - type: object
+          required: [mode, demo_mode, bot_username, profile_complete]
+          properties:
+            mode: { type: string, enum: [chairman, resident] }
+            invite_token: { type: string }
+            demo_mode: { type: boolean }
+            bot_username: { type: string }
+            profile_complete: { type: boolean }
+    ProfileInput:
+      type: object
+      additionalProperties: false
+      required: [full_name, authority_type, address, entrances_count]
+      properties:
+        full_name: { type: string }
+        apartment_no: { type: string }
+        authority_type: { type: string, enum: [oss_decision, power_of_attorney] }
+        authority_date: { $ref: "#/components/schemas/Date" }
+        authority_number: { type: string }
+        applicability_confirmed: { type: [boolean, "null"] }
+        city: { type: string }
+        address: { type: string }
+        entrances_count: { type: integer, minimum: 1, maximum: 50 }
+        executor_name: { type: string }
+        contract_type: { type: string, enum: ["", management, services, repair] }
+        contract_number: { type: string }
+        contract_date: { $ref: "#/components/schemas/Date" }
+        contract_end_date: { $ref: "#/components/schemas/Date" }
+    Act:
+      type: object
+      description: Карточка акта; поля шапки повторяют форму приказа Минстроя № 761/пр
+      required: [id, house_id, parent_act_id, source_file_id, number, act_date, city, address, customer_full_name, customer_apartment,
+        customer_authority_text, executor_name, executor_signatory_name, executor_signatory_position, executor_basis, contract_type,
+        contract_number, contract_date, contract_end_date, period_from, period_to, total_amount, total_amount_words, copies_received,
+        executor_signed, received_on, received_channel, executor_sent_on, status, decision, rules_version, is_demo, demo_shift_days,
+        created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        house_id: { type: string, format: uuid }
+        parent_act_id: { type: [string, "null"] }
+        source_file_id: { type: [string, "null"] }
+        number: { type: string }
+        act_date: { $ref: "#/components/schemas/Date" }
+        city: { type: string }
+        address: { type: string }
+        customer_full_name: { type: string }
+        customer_apartment: { type: string }
+        customer_authority_text: { type: string }
+        executor_name: { type: string }
+        executor_signatory_name: { type: string }
+        executor_signatory_position: { type: string }
+        executor_basis: { type: string }
+        contract_type: { type: string, enum: [management, services, repair] }
+        contract_number: { type: string }
+        contract_date: { $ref: "#/components/schemas/Date" }
+        contract_end_date: { $ref: "#/components/schemas/Date" }
+        period_from: { $ref: "#/components/schemas/Date" }
+        period_to: { $ref: "#/components/schemas/Date" }
+        total_amount: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        total_amount_words: { type: string }
+        copies_received: { type: [integer, "null"] }
+        executor_signed: { type: [boolean, "null"] }
+        received_on: { $ref: "#/components/schemas/Date" }
+        received_channel: { type: string, enum: ["", post, email, executor_portal, in_person, other] }
+        executor_sent_on: { $ref: "#/components/schemas/Date" }
+        status: { $ref: "#/components/schemas/Status" }
+        decision: { type: string, enum: ["", sign, refuse] }
+        rules_version: { type: string }
+        is_demo: { type: boolean }
+        demo_shift_days: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Timing:
+      type: object
+      required: [stage, day_number, days_left_response, days_left_silent]
+      properties:
+        stage: { type: string, enum: [not_received, response_window, response_overdue, silent_accepted] }
+        day_number: { type: integer }
+        days_left_response: { type: integer }
+        days_left_silent: { type: integer }
+    Deadlines:
+      type: object
+      required: [response_on, silent_on, timing, basis]
+      properties:
+        response_on: { type: string, format: date }
+        silent_on: { type: string, format: date }
+        timing: { $ref: "#/components/schemas/Timing" }
+        basis: { type: array, items: { $ref: "#/components/schemas/Basis" } }
+    Sums:
+      type: object
+      required: [lines_total, disputed, disputed_count, unchecked_count, act_total, mismatch]
+      properties:
+        lines_total: { $ref: "#/components/schemas/Money" }
+        disputed: { $ref: "#/components/schemas/Money" }
+        disputed_count: { type: integer }
+        unchecked_count: { type: integer }
+        act_total: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        mismatch: { type: boolean, description: Сумма строк не совпадает с итогом п. 2 акта }
+    Line:
+      type: object
+      required: [id, position, work_name, pp290_ref, periodicity_qty, unit, unit_price, amount, review_status, comment,
+        disputed_amount, resident_visible, entrances, prev_disputed, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        work_name: { type: string }
+        pp290_ref: { type: string }
+        periodicity_qty: { type: string }
+        unit: { type: string }
+        unit_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        amount: { $ref: "#/components/schemas/Money" }
+        review_status: { $ref: "#/components/schemas/ReviewStatus" }
+        comment: { type: string }
+        disputed_amount: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        resident_visible: { type: boolean }
+        entrances: { type: [array, "null"], items: { type: integer } }
+        prev_disputed: { type: boolean, description: Строка оспаривалась в предыдущем акте }
+        updated_at: { type: string, format: date-time }
+    LineInput:
+      type: object
+      additionalProperties: false
+      properties:
+        work_name: { type: string, maxLength: 500 }
+        pp290_ref: { type: string }
+        periodicity_qty: { type: string }
+        unit: { type: string }
+        unit_price: { type: [string, "null"], description: "Пустая строка — очистить" }
+        amount: { type: string }
+        review_status: { $ref: "#/components/schemas/ReviewStatus" }
+        comment: { type: string, maxLength: 2000 }
+        disputed_amount: { type: [string, "null"] }
+        resident_visible: { type: boolean }
+        entrances: { type: array, items: { type: integer } }
+    Evidence:
+      type: object
+      required: [id, line_id, file_id, seq, code, note, author_role, mime, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        line_id: { type: [string, "null"] }
+        file_id: { type: [string, "null"] }
+        seq: { type: integer }
+        code: { type: string, example: Д-1 }
+        note: { type: string }
+        author_role: { type: string }
+        mime: { type: string }
+        created_at: { type: string, format: date-time }
+        url: { type: string, description: Подписанная ссылка на файл }
+    VoteSummary:
+      type: object
+      required: [yes, no, unknown, comments]
+      properties:
+        yes: { type: integer }
+        no: { type: integer }
+        unknown: { type: integer }
+        comments: { type: array, items: { type: string } }
+    LineView:
+      allOf:
+        - $ref: "#/components/schemas/Line"
+        - type: object
+          required: [evidence, residents]
+          properties:
+            evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
+            residents: { oneOf: [{ $ref: "#/components/schemas/VoteSummary" }, { type: "null" }] }
+    Document:
+      type: object
+      required: [id, kind, file_id, version, rules_version, created_at, url]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [cover_letter, refusal] }
+        file_id: { type: string }
+        version: { type: integer }
+        rules_version: { type: string }
+        created_at: { type: string, format: date-time }
+        url: { type: string }
+    Dispatch:
+      type: object
+      required: [id, document_id, channel, channel_note, sent_on, created_at]
+      properties:
+        id: { type: string }
+        document_id: { type: [string, "null"] }
+        channel: { $ref: "#/components/schemas/Channel" }
+        channel_note: { type: string }
+        sent_on: { type: string, format: date }
+        created_at: { type: string, format: date-time }
+    Event:
+      type: object
+      required: [id, type, payload, created_at]
+      properties:
+        id: { type: string }
+        type: { type: string }
+        payload: { type: object }
+        created_at: { type: string, format: date-time }
+    ActView:
+      type: object
+      required: [act, status_title, house, today, editable, deadlines, checks, sums, lines, documents, dispatches, events,
+        invite, respondents, source_file_url, notes]
+      properties:
+        act: { $ref: "#/components/schemas/Act" }
+        status_title: { type: string }
+        house: { $ref: "#/components/schemas/House" }
+        today: { type: string, format: date, description: "«Сегодня» для акта (у демо-актов со сдвигом)" }
+        editable: { type: boolean }
+        deadlines: { oneOf: [{ $ref: "#/components/schemas/Deadlines" }, { type: "null" }] }
+        checks: { type: array, items: { $ref: "#/components/schemas/Claim" }, description: Проверки сроков исполнителя }
+        sums: { $ref: "#/components/schemas/Sums" }
+        lines: { type: array, items: { $ref: "#/components/schemas/LineView" } }
+        documents: { type: array, items: { $ref: "#/components/schemas/Document" } }
+        dispatches: { type: [array, "null"], items: { $ref: "#/components/schemas/Dispatch" } }
+        events: { type: array, items: { $ref: "#/components/schemas/Event" } }
+        invite:
+          oneOf:
+            - type: object
+              required: [token, link]
+              properties: { token: { type: string }, link: { type: string } }
+            - type: "null"
+        respondents: { type: integer }
+        source_file_url: { type: [string, "null"] }
+        notes: { type: array, items: { $ref: "#/components/schemas/Claim" } }
+    ActSummary:
+      allOf:
+        - $ref: "#/components/schemas/Act"
+        - type: object
+          required: [status_title, deadlines]
+          properties:
+            status_title: { type: string }
+            deadlines: { oneOf: [{ $ref: "#/components/schemas/Deadlines" }, { type: "null" }] }
+    HeaderPatch:
+      type: object
+      additionalProperties: false
+      description: Любое подмножество полей; отсутствующие не меняются
+      properties:
+        number: { type: string }
+        act_date: { $ref: "#/components/schemas/Date" }
+        city: { type: string }
+        address: { type: string }
+        customer_full_name: { type: string }
+        customer_apartment: { type: string }
+        customer_authority_text: { type: string }
+        executor_name: { type: string }
+        executor_signatory_name: { type: string }
+        executor_signatory_position: { type: string }
+        executor_basis: { type: string }
+        contract_type: { type: string, enum: [management, services, repair] }
+        contract_number: { type: string }
+        contract_date: { $ref: "#/components/schemas/Date" }
+        contract_end_date: { $ref: "#/components/schemas/Date" }
+        period_from: { $ref: "#/components/schemas/Date" }
+        period_to: { $ref: "#/components/schemas/Date" }
+        total_amount: { type: string }
+        total_amount_words: { type: string }
+        copies_received: { type: integer, minimum: 0, maximum: 10 }
+        executor_signed: { type: boolean }
+        received_on: { type: string, format: date }
+        received_channel: { type: string, enum: ["", post, email, executor_portal, in_person, other] }
+        executor_sent_on: { $ref: "#/components/schemas/Date" }
+    ResidentLine:
+      type: object
+      required: [id, position, work_name, periodicity_qty, entrances]
+      properties:
+        id: { type: string }
+        position: { type: integer }
+        work_name: { type: string }
+        periodicity_qty: { type: string }
+        entrances: { type: [array, "null"], items: { type: integer } }
+    Vote:
+      type: object
+      required: [line_id, answer]
+      properties:
+        line_id: { type: string, format: uuid }
+        entrance_no: { type: integer }
+        answer: { type: string, enum: [yes, no, unknown] }
+        comment: { type: string, maxLength: 500 }
+    ResidentView:
+      type: object
+      required: [act_number, address, period_from, period_to, entrances_count, open, is_demo, consented, lines, my_votes]
+      properties:
+        act_number: { type: string }
+        address: { type: string }
+        period_from: { $ref: "#/components/schemas/Date" }
+        period_to: { $ref: "#/components/schemas/Date" }
+        entrances_count: { type: integer }
+        open: { type: boolean }
+        is_demo: { type: boolean }
+        consented: { type: boolean }
+        lines: { type: array, items: { $ref: "#/components/schemas/ResidentLine" } }
+        my_votes: { type: array, items: { $ref: "#/components/schemas/Vote" } }
+    VotesInput:
+      type: object
+      additionalProperties: false
+      required: [entrance_no, votes]
+      properties:
+        consent: { type: boolean }
+        entrance_no: { type: integer, minimum: 1 }
+        votes: { type: array, minItems: 1, items: { $ref: "#/components/schemas/Vote" } }
+    DecisionResult:
+      type: object
+      required: [document, url, delivered]
+      properties:
+        document: { $ref: "#/components/schemas/Document" }
+        url: { type: string }
+        delivered: { type: boolean, description: Файл отправлен ботом в чат председателя }
+        warning: { type: string }
+    CatalogItem:
+      type: object
+      required: [ref, section, text]
+      properties:
+        ref: { type: string, example: "п. 23, абз. 4" }
+        section: { type: string }
+        text: { type: string }

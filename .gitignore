@@ -1,0 +1,23 @@
+# Секреты
+.env
+.env.local
+
+# Сборка и зависимости
+/bin/
+/dist/
+webapp/node_modules/
+webapp/dist/
+webapp/*.tsbuildinfo
+backend/bin/
+
+# Служебное
+.claude/
+export-*/
+*.log
+*.csv
+!config/**/*.csv
+!testdata/**/*.csv
+
+# Документы организаторов и выгрузки КонсультантПлюс не публикуем — ссылки в README
+docs/tz/
+docs/*.pdf
