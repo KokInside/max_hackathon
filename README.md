@@ -99,7 +99,7 @@ docker compose up --build
 
 ### Зависимости
 
-Версии зафиксированы: `backend/go.mod` + `backend/go.sum`, `webapp/package.json` (точные версии) + `webapp/package-lock.json`. Базовые образы: `golang:1.26-alpine`, `alpine:3.22`, `node:24-alpine`, `caddy:2-alpine`, `postgres:17-alpine`. Всё под свободными лицензиями:
+Версии зафиксированы: `backend/go.mod` + `backend/go.sum`, `webapp/package.json` (точные версии) + `webapp/package-lock.json`. Базовые образы: сборочные зафиксированы до патча (`golang:1.26.8-alpine`, `node:24.21.0-alpine`), рабочие — до минорной версии, чтобы получать исправления безопасности (`alpine:3.22`, `caddy:2.11-alpine`), PostgreSQL — до мажорной (`postgres:17-alpine`: формат данных меняется только между мажорными версиями). Всё под свободными лицензиями:
 
 | Библиотека | Лицензия |
 |---|---|
@@ -234,7 +234,8 @@ docker compose up -d --build
 После этого:
 1. Caddy получит сертификат Let's Encrypt, а бот зарегистрирует вебхук `https://<домен>/webhook`.
 2. В кабинете MAX для партнёров укажите у бота адрес мини-приложения: `https://<домен>`.
-3. Резервная копия БД: `docker compose exec db pg_dump -U priemka priemka > backup.sql`.
+3. Ежедневная резервная копия БД и файлов (хранится 14 дней, восстановление — в шапке скрипта):
+   `crontab -e` → `30 3 * * * cd <путь к priemka> && mkdir -p backups && scripts/backup.sh >> backups/backup.log 2>&1`.
 
 ## Структура репозитория
 
@@ -248,4 +249,6 @@ certs/       корневой сертификат Минцифры
 demo/        act-demo.pdf
 docs/        требования, контекст, план
 DATA-API.yaml, scripts/check-api.sh — проверки собственного API
+scripts/check.sh — обязательные проверки кода (vet, staticcheck, тесты, govulncheck, tsc, npm audit)
+scripts/backup.sh — резервная копия БД и файлов
 ```

@@ -1,5 +1,5 @@
 # Сборка из корня репозитория: docker build -f backend/Dockerfile .
-FROM golang:1.26-alpine AS build
+FROM golang:1.26.8-alpine AS build
 
 WORKDIR /src
 

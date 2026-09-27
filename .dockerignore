@@ -6,6 +6,8 @@
 docs
 **/node_modules
 **/dist
+**/*.tsbuildinfo
+backups
 backend/bin
 *.log
 demo

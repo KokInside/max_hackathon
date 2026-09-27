@@ -3,10 +3,18 @@
 # вход в API — заголовком X-Dev-User (DEV_AUTH=true). Прод: см. README, раздел «Развёртывание».
 name: priemka
 
+# Логи контейнеров ограничены: на VPS без ротации json-логи заполняют диск.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: priemka
       POSTGRES_USER: priemka
@@ -24,6 +32,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy
@@ -49,6 +58,7 @@ services:
       context: .
       dockerfile: webapp/Dockerfile
     restart: unless-stopped
+    logging: *logging
     depends_on:
       app:
         condition: service_healthy
@@ -58,6 +68,7 @@ services:
     ports:
       - "${HTTP_PORT:-8080}:80"
       - "${HTTPS_PORT:-8443}:443"
+      - "${HTTPS_PORT:-8443}:443/udp" # HTTP/3
     volumes:
       - caddy-data:/data
 
