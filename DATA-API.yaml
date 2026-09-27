@@ -1,7 +1,14 @@
-# Описание обязательных проверок собственного API «Приёмка» (ТЗ трека «Умный город», раздел «Формат сдачи»).
-# ASSUMPTION: организаторы не опубликовали схему файла; структура повторяет перечень полей из ТЗ.
-# Токены тестовых учёток в репозиторий не кладутся: они указаны на первом слайде презентации.
-# Прогон всех проверок: scripts/check-api.sh <BASE_URL> <CHAIRMAN_TOKEN> <RESIDENT_TOKEN>
+# Обязательные проверки собственного API «Приёмка» (ТЗ трека «Умный город», «Формат сдачи», п. 5).
+# ASSUMPTION: организаторы не опубликовали схему файла; поля повторяют перечень из ТЗ:
+#   1 schema_version · 2 solution · 3 base_url · 4 checks · 5 method + path · 6 params (path, query, headers, body)
+#   7 role · 8 expected_status · 9 response (content_type, schema, required).
+# Токены тестовых учёток в репозиторий не кладутся: они на первом слайде презентации.
+# Прогон: scripts/check-api.sh https://<домен>/api/v1 <CHAIRMAN_TOKEN> <RESIDENT_TOKEN>
+#   (читает этот файл; тот же код в go test сверяет проверки с API и openapi.yaml).
+#
+# Данные: у тестового председателя всегда есть демо-акт на проверке — первый в списке. Сервер создаёт новый,
+# если прежний ушёл в финальный статус, поэтому проверки можно повторять весь период проверки.
+# ${имя} — значение, сохранённое предыдущей проверкой (поле save; путь вида acts[0].id).
 
 schema_version: "1.0"
 solution: "Приёмка — рабочее место председателя совета МКД (бот t84_hakaton_max_bot)"
@@ -13,112 +20,179 @@ roles:
     description: "Председатель совета МКД: демо-дом, демо-акт на проверке, приглашение жильцов"
     auth: { type: header, name: Authorization, value: "Bearer <CHAIRMAN_TOKEN>" }
   resident:
-    description: "Жилец дома: отвечает по ссылке-приглашению"
+    description: "Жилец дома: отвечает по ссылке-приглашению, к карточке акта доступа нет"
     auth: { type: header, name: Authorization, value: "Bearer <RESIDENT_TOKEN>" }
+  anonymous:
+    description: "Без аутентификации"
+    auth: { type: none }
 
-# {act_id}, {line_id}, {invite_token} берутся из ответов предыдущих проверок (поле save).
 checks:
   - id: me
+    description: "Профиль и режим пользователя"
     method: GET
     path: /me
     role: chairman
     expected_status: [200]
-    response: { content_type: application/json, required: [user, profile, house, mode, profile_complete] }
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/Me"
+      required: [user.id, profile, house.id, mode, profile_complete]
 
   - id: acts_list
+    description: "Акты дома, новые сверху"
     method: GET
     path: /acts
     role: chairman
     expected_status: [200]
-    response: { content_type: application/json, required: [acts] }
+    response:
+      content_type: application/json
+      required: [acts, "acts[0].id", "acts[0].status"]
     save: { act_id: "acts[0].id" }
 
   - id: act_view
+    description: "Карточка акта: сроки с основаниями, проверки УК, суммы, строки"
     method: GET
-    path: /acts/{act_id}
+    path: /acts/{id}
+    params:
+      path: { id: "${act_id}" }
     role: chairman
     expected_status: [200]
     response:
       content_type: application/json
-      required: [act, status_title, deadlines, checks, sums, lines, documents, events]
+      schema: "#/components/schemas/ActView"
+      required: [act.id, act.status, status_title, deadlines, checks, sums, "lines[0].id", documents, events]
     save: { line_id: "lines[0].id" }
 
   - id: act_view_unauthorized
+    description: "Без токена — 401 в едином формате ошибок"
     method: GET
-    path: /acts/{act_id}
-    role: none
+    path: /acts/{id}
+    params:
+      path: { id: "${act_id}" }
+    role: anonymous
     expected_status: [401]
-    response: { content_type: application/json, required: [error.code, error.message, request_id] }
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/Error"
+      required: [error.code, error.message, request_id]
 
   - id: act_view_foreign
+    description: "Жилец не видит карточку акта"
     method: GET
-    path: /acts/{act_id}
+    path: /acts/{id}
+    params:
+      path: { id: "${act_id}" }
     role: resident
     expected_status: [403]
-    response: { content_type: application/json, required: [error.code] }
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/Error"
+      required: [error.code, error.message, request_id]
 
   - id: line_review
+    description: "Отметка строки «не выполнено» с возражением"
     method: PATCH
-    path: /lines/{line_id}
-    role: chairman
-    headers: { Content-Type: application/json }
-    body: { review_status: not_done, comment: "Проверка API: работа не выполнена" }
-    expected_status: [200, 409]
-    response: { content_type: application/json, required: [id, review_status, amount] }
-
-  - id: line_review_invalid
-    method: PATCH
-    path: /lines/{line_id}
-    role: chairman
-    headers: { Content-Type: application/json }
-    body: { review_status: maybe }
-    expected_status: [422, 409]
-    response: { content_type: application/json, required: [error.code] }
-
-  - id: catalog
-    method: GET
-    path: /catalog/works
-    query: { q: "мытье окон" }
+    path: /lines/{id}
+    params:
+      path: { id: "${line_id}" }
+      headers: { Content-Type: application/json }
+      body: { review_status: not_done, comment: "Проверка API: работа не выполнена" }
     role: chairman
     expected_status: [200]
-    response: { content_type: application/json, required: [items, edition] }
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/Line"
+      required: [id, review_status, comment, amount]
+
+  - id: line_review_invalid
+    description: "Недопустимый статус строки — 422"
+    method: PATCH
+    path: /lines/{id}
+    params:
+      path: { id: "${line_id}" }
+      headers: { Content-Type: application/json }
+      body: { review_status: maybe }
+    role: chairman
+    expected_status: [422]
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/Error"
+      required: [error.code, error.message, request_id]
+
+  - id: catalog
+    description: "Поиск работы в минимальном перечне ПП № 290"
+    method: GET
+    path: /catalog/works
+    params:
+      query: { q: "мытье окон" }
+    role: chairman
+    expected_status: [200]
+    response:
+      content_type: application/json
+      required: [edition, source, "items[0].ref", "items[0].text"]
 
   - id: invite
+    description: "Ссылка-приглашение для жильцов"
     method: POST
-    path: /acts/{act_id}/invites
+    path: /acts/{id}/invites
+    params:
+      path: { id: "${act_id}" }
     role: chairman
-    expected_status: [201, 409]
-    response: { content_type: application/json, required: [token, link, text] }
+    expected_status: [201]
+    response:
+      content_type: application/json
+      required: [token, link, text]
     save: { invite_token: token }
 
   - id: resident_view
+    description: "Экран жильца по приглашению"
     method: GET
-    path: /invites/{invite_token}
+    path: /invites/{token}
+    params:
+      path: { token: "${invite_token}" }
     role: resident
     expected_status: [200]
-    response: { content_type: application/json, required: [address, entrances_count, lines, open] }
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/ResidentView"
+      required: [address, entrances_count, open, "lines[0].id"]
 
   - id: resident_votes
+    description: "Ответ жильца: согласие, подъезд, «не было»"
     method: PUT
-    path: /invites/{invite_token}/votes
+    path: /invites/{token}/votes
+    params:
+      path: { token: "${invite_token}" }
+      headers: { Content-Type: application/json }
+      body: { consent: true, entrance_no: 1, votes: [{ line_id: "${line_id}", answer: "no", comment: "Проверка API" }] }
     role: resident
-    headers: { Content-Type: application/json }
-    body: { consent: true, entrance_no: 1, votes: [{ line_id: "{line_id}", answer: "no", comment: "Проверка API" }] }
-    expected_status: [200, 409, 422]
-    response: { content_type: application/json }
+    expected_status: [200]
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/ResidentView"
+      required: [consented, my_votes]
 
   - id: decision_refuse
+    description: "Мотивированный отказ от подписания: PDF по возражениям"
     method: POST
-    path: /acts/{act_id}/decision
+    path: /acts/{id}/decision
+    params:
+      path: { id: "${act_id}" }
+      headers: { Content-Type: application/json }
+      body: { decision: refuse }
     role: chairman
-    headers: { Content-Type: application/json }
-    body: { decision: refuse }
-    expected_status: [201, 409]
-    response: { content_type: application/json, required: [document.id, document.kind, url, delivered] }
+    expected_status: [201]
+    response:
+      content_type: application/json
+      schema: "#/components/schemas/DecisionResult"
+      required: [document.id, document.kind, document.url, url, delivered]
 
   - id: rules
+    description: "Нормы, параметры и допущения с источниками"
     method: GET
     path: /rules
-    role: none
+    role: anonymous
     expected_status: [200]
-    response: { content_type: application/json, required: [version, rules, params] }
+    response:
+      content_type: application/json
+      required: [version, "rules[0].rule_id", "rules[0].source", params]

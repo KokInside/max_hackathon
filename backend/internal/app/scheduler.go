@@ -12,7 +12,7 @@ import (
 	"priemka/internal/store"
 )
 
-var tickMu sync.Mutex
+var tickMu, testActMu sync.Mutex
 
 // isPermanent — ошибка отправки, которую повтор не исправит (пользователь удалил чат с ботом и т. п.).
 func isPermanent(err error) bool {
@@ -36,6 +36,16 @@ func (s *Service) RunScheduler(ctx context.Context, every time.Duration) {
 
 // Tick — один проход планировщика. Идемпотентен: повторный вызов ничего не дублирует.
 func (s *Service) Tick(ctx context.Context) {
+	s.tickLocked(ctx)
+	// Вне tickMu: ensureTestAct через SetReceived сама вызывает Tick.
+	if id := s.testChairman.Load(); id != nil {
+		if err := s.ensureTestAct(ctx, *id); err != nil {
+			s.log.Error("планировщик: тестовая учётка", "err", err)
+		}
+	}
+}
+
+func (s *Service) tickLocked(ctx context.Context) {
 	tickMu.Lock()
 	defer tickMu.Unlock()
 	if err := s.advanceStatuses(ctx); err != nil {
@@ -217,7 +227,8 @@ const (
 	TestResidentMaxID int64 = -2
 )
 
-// EnsureTestAccounts создаёт пользователей тестовых ролей, демо-дом, демо-акт и приглашение.
+// EnsureTestAccounts создаёт пользователей тестовых ролей и демо-дом. После вызова планировщик следит,
+// чтобы у тестового председателя был рабочий демо-акт (ensureTestAct).
 func (s *Service) EnsureTestAccounts(ctx context.Context) (chairmanID, residentID string, err error) {
 	ch, err := s.EnsureUser(ctx, TestChairmanMaxID, "Тестовый", "Председатель")
 	if err != nil {
@@ -227,26 +238,43 @@ func (s *Service) EnsureTestAccounts(ctx context.Context) (chairmanID, residentI
 	if err != nil {
 		return "", "", err
 	}
-	q := s.st.Q()
-	if err := q.SetConsent(ctx, ch.ID); err != nil {
+	if err := s.st.Q().SetConsent(ctx, ch.ID); err != nil {
 		return "", "", err
 	}
-	acts, err := s.ActsOfUser(ctx, ch.ID)
-	if err != nil {
+	if err := s.ensureTestAct(ctx, ch.ID); err != nil {
 		return "", "", err
 	}
-	if len(acts) == 0 {
-		a, err := s.createDemoAct(ctx, ch.ID, nil) // тестовой учётке демо-акт нужен независимо от DEMO_MODE
-		if err != nil {
-			return "", "", fmt.Errorf("демо-акт тестовой учётки: %w", err)
-		}
-		two, yes := 2, true
-		if _, err := s.SetReceived(ctx, ch.ID, a.ID, ReceivedInput{ReceivedOn: s.RealToday(), Channel: "in_person", CopiesReceived: &two, ExecutorSigned: &yes}); err != nil {
-			return "", "", err
-		}
-		if _, err := s.CreateInvite(ctx, ch.ID, a.ID); err != nil {
-			return "", "", err
-		}
-	}
+	s.testChairman.Store(&ch.ID)
 	return ch.ID, res.ID, nil
+}
+
+// ensureTestAct: первый в списке акт тестового председателя должен быть на проверке или с решением.
+// Проверки из DATA-API.yaml берут именно его; если он ушёл в финальный статус (например, «принят молчанием»
+// через 30 дней) или сверху оказался черновик, создаётся свежий — проверки повторяемы весь период проверки.
+func (s *Service) ensureTestAct(ctx context.Context, chairmanID string) error {
+	// Вложенный (из SetReceived → Tick) или параллельный вызов пропускаем: акт уже создаётся.
+	if !testActMu.TryLock() {
+		return nil
+	}
+	defer testActMu.Unlock()
+	acts, err := s.ActsOfUser(ctx, chairmanID)
+	if err != nil {
+		return err
+	}
+	if len(acts) > 0 && (acts[0].Status == domain.StatusInReview || acts[0].Status == domain.StatusDecided) {
+		return nil
+	}
+	a, err := s.createDemoAct(ctx, chairmanID, nil) // тестовой учётке демо-акт нужен независимо от DEMO_MODE
+	if err != nil {
+		return fmt.Errorf("демо-акт тестовой учётки: %w", err)
+	}
+	two, yes := 2, true
+	if _, err := s.SetReceived(ctx, chairmanID, a.ID, ReceivedInput{ReceivedOn: s.RealToday(), Channel: "in_person", CopiesReceived: &two, ExecutorSigned: &yes}); err != nil {
+		return err
+	}
+	if _, err := s.CreateInvite(ctx, chairmanID, a.ID); err != nil {
+		return err
+	}
+	s.log.Info("тестовая учётка: новый демо-акт", "act", a.ID)
+	return nil
 }

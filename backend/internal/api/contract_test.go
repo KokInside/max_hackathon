@@ -42,6 +42,7 @@ type contract struct {
 	t      *testing.T
 	srv    *httptest.Server
 	router routers.Router
+	doc    *openapi3.T
 	seen   map[string]bool // «МЕТОД путь-шаблон» → проверен
 }
 
@@ -123,7 +124,7 @@ func newContract(t *testing.T) *contract {
 	for _, ct := range []string{"application/pdf", "image/png", "image/jpeg", "image/webp"} {
 		openapi3filter.RegisterBodyDecoder(ct, openapi3filter.FileBodyDecoder)
 	}
-	return &contract{t: t, srv: srv, router: router, seen: map[string]bool{}}
+	return &contract{t: t, srv: srv, router: router, doc: doc, seen: map[string]bool{}}
 }
 
 type call struct {
@@ -171,34 +172,39 @@ func (c *contract) do(k call) map[string]any {
 		c.t.Fatalf("%s %s: код %d, ожидался %d: %s", k.method, k.path, resp.StatusCode, k.want, respBody)
 	}
 
-	// Сверка со спецификацией.
-	vreq, _ := http.NewRequest(k.method, c.srv.URL+"/api/v1"+k.path, bytes.NewReader(raw))
+	c.verify(req, raw, resp.StatusCode, resp.Header, respBody)
+	return decodeJSON(respBody)
+}
+
+// verify сверяет запрос и ответ с openapi.yaml.
+func (c *contract) verify(req *http.Request, raw []byte, status int, header http.Header, respBody []byte) {
+	c.t.Helper()
+	vreq, _ := http.NewRequest(req.Method, req.URL.String(), bytes.NewReader(raw))
 	vreq.Header = req.Header.Clone()
 	route, params, err := c.router.FindRoute(vreq)
 	if err != nil {
-		if k.want == http.StatusMethodNotAllowed || k.want == http.StatusNotFound && strings.Contains(k.path, "no-such") {
-			return decodeJSON(respBody)
+		if status == http.StatusMethodNotAllowed || status == http.StatusNotFound && strings.Contains(req.URL.Path, "no-such") {
+			return
 		}
-		c.t.Fatalf("%s %s нет в openapi.yaml: %v", k.method, k.path, err)
+		c.t.Fatalf("%s %s нет в openapi.yaml: %v", req.Method, req.URL.Path, err)
 	}
-	c.seen[k.method+" "+route.Path] = true
+	c.seen[req.Method+" "+route.Path] = true
 	in := &openapi3filter.RequestValidationInput{Request: vreq, PathParams: params, Route: route,
 		Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc}}
-	if k.want < 400 { // корректные запросы должны соответствовать схеме запроса
+	if status < 400 { // корректные запросы должны соответствовать схеме запроса
 		if err := openapi3filter.ValidateRequest(context.Background(), in); err != nil {
-			c.t.Errorf("%s %s: запрос не по контракту: %v", k.method, k.path, err)
+			c.t.Errorf("%s %s: запрос не по контракту: %v", req.Method, req.URL.Path, err)
 		}
 	}
-	out := &openapi3filter.ResponseValidationInput{RequestValidationInput: in, Status: resp.StatusCode, Header: resp.Header,
+	out := &openapi3filter.ResponseValidationInput{RequestValidationInput: in, Status: status, Header: header,
 		Options: &openapi3filter.Options{IncludeResponseStatus: true}}
 	out.SetBodyBytes(respBody)
 	if err := openapi3filter.ValidateResponse(context.Background(), out); err != nil {
-		c.t.Errorf("%s %s → %d: ответ не по контракту: %v", k.method, k.path, resp.StatusCode, err)
+		c.t.Errorf("%s %s → %d: ответ не по контракту: %v", req.Method, req.URL.Path, status, err)
 	}
-	if k.want >= 400 && resp.Header.Get("Content-Type") != "application/json; charset=utf-8" {
-		c.t.Errorf("%s %s: ошибка не в JSON", k.method, k.path)
+	if status >= 400 && header.Get("Content-Type") != "application/json; charset=utf-8" {
+		c.t.Errorf("%s %s: ошибка не в JSON", req.Method, req.URL.Path)
 	}
-	return decodeJSON(respBody)
 }
 
 func decodeJSON(b []byte) map[string]any {

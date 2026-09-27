@@ -578,3 +578,39 @@ func TestReminderPermanentError(t *testing.T) {
 		t.Fatalf("после постоянной ошибки попыток %d, ожидалось %d (без повторов)", n, store.MaxReminderAttempts)
 	}
 }
+
+// Тестовая учётка: когда демо-акт уходит в финальный статус, планировщик создаёт свежий — проверки DATA-API.yaml
+// остаются повторяемыми весь период проверки.
+func TestTestAccountKeepsWorkableAct(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	ch, _, err := e.svc.EnsureTestAccounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acts, err := e.svc.ActsOfUser(ctx, ch)
+	if err != nil || len(acts) != 1 || acts[0].Status != domain.StatusInReview {
+		t.Fatalf("после создания: %v %+v", err, acts)
+	}
+	e.svc.Tick(ctx)
+	if acts, _ = e.svc.ActsOfUser(ctx, ch); len(acts) != 1 {
+		t.Fatalf("лишний акт при рабочем: %d", len(acts))
+	}
+
+	e.now = e.now.AddDate(0, 0, 40) // прошли 30 дней — прежний акт «принят молчанием»
+	e.svc.Tick(ctx)
+	acts, err = e.svc.ActsOfUser(ctx, ch)
+	if err != nil || len(acts) != 2 {
+		t.Fatalf("после 40 дней: %v, актов %d", err, len(acts))
+	}
+	if acts[0].Status != domain.StatusInReview || acts[1].Status != domain.StatusDeemedAccepted {
+		t.Fatalf("статусы: %s, %s", acts[0].Status, acts[1].Status)
+	}
+	if acts[0].ReceivedOn != e.svc.RealToday() {
+		t.Fatalf("новый акт получен %v, ожидалось %s", acts[0].ReceivedOn, e.svc.RealToday())
+	}
+	e.svc.Tick(ctx)
+	if acts, _ = e.svc.ActsOfUser(ctx, ch); len(acts) != 2 {
+		t.Fatalf("повторный тик создал акт: %d", len(acts))
+	}
+}

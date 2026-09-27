@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -46,6 +47,8 @@ type Service struct {
 	demo   *DemoData
 	now    func() time.Time
 	log    *slog.Logger
+
+	testChairman atomic.Pointer[string] // id тестового председателя, если включены тестовые учётки
 }
 
 func New(cfg Config, st *store.Store, rs *rules.Set, tx *rules.Texts, fs *files.Storage, pr *pdf.Renderer, log *slog.Logger) (*Service, error) {
