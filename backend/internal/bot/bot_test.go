@@ -305,6 +305,21 @@ func TestBotScenario(t *testing.T) {
 		t.Fatalf("новый акт не связан с прежним или без файла: %+v", na)
 	}
 
+	// Удаление акта кнопкой: подтверждение, удаление, прежний акт цепочки остаётся.
+	del := btn(h.expect(h.press("open:"+newID), "Акт № без номера"), "adel:")
+	if del == "" {
+		t.Fatal("нет кнопки «Удалить акт»")
+	}
+	h.expect(h.press(del), "Это необратимо")
+	h.expect(h.press("adelc:"+newID), "Акт № без номера удалён")
+	if _, err := h.svc.Store().Q().ActByID(ctx, newID); err != store.ErrNotFound {
+		t.Fatalf("акт не удалён: %v", err)
+	}
+	if _, err := h.svc.Store().Q().ActByID(ctx, actID); err != nil {
+		t.Fatalf("прежний акт пострадал: %v", err)
+	}
+	h.expect(h.press("open:"+newID), "Акт не найден")
+
 	// Повторная доставка того же события ничего не делает.
 	dup := model.Update{UpdateType: model.UpdateMessageCreated, Message: &model.MessageUpdate{
 		Recipient: model.Recipient{ChatType: model.ChatTypeDialog, ChatID: 1}, Sender: model.Sender{UserID: h.uid},

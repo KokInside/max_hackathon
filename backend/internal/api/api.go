@@ -111,6 +111,7 @@ func (a *API) Routes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/acts/demo", auth(a.createDemoAct))
 	mux.Handle("GET /api/v1/acts/{id}", auth(a.getAct))
 	mux.Handle("PATCH /api/v1/acts/{id}", auth(a.patchAct))
+	mux.Handle("DELETE /api/v1/acts/{id}", auth(a.deleteAct))
 	mux.Handle("POST /api/v1/acts/{id}/lines", auth(a.addLine))
 	mux.Handle("PATCH /api/v1/lines/{id}", auth(a.patchLine))
 	mux.Handle("DELETE /api/v1/lines/{id}", auth(a.deleteLine))

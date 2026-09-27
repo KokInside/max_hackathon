@@ -65,6 +65,7 @@ export const api = {
   patchAct: (id: string, p: HeaderPatch) => request<ActView>('PATCH', `/acts/${id}`, p),
   addLine: (actId: string, l: LineInput) => request<S['Line']>('POST', `/acts/${actId}/lines`, l),
   patchLine: (id: string, l: LineInput) => request<S['Line']>('PATCH', `/lines/${id}`, l),
+  deleteAct: (id: string) => request<void>('DELETE', `/acts/${id}`),
   deleteLine: (id: string) => request<void>('DELETE', `/lines/${id}`),
   addEvidence: (lineId: string, file: File, note: string) => {
     const f = new FormData()

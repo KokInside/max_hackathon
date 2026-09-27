@@ -85,7 +85,13 @@ export interface paths {
         get: operations["getAct"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Удалить акт
+         * @description Удаляет акт со строками, доказательствами, документами, ответами жильцов, напоминаниями и файлами.
+         *     Демо-акт удаляется всегда; настоящий — пока документ не отмечен отправленным в УК (иначе 409 ACT_SENT).
+         *     Можно ли удалить — поле `deletable` карточки.
+         */
+        delete: operations["deleteAct"];
         options?: never;
         head?: never;
         /** Изменить шапку акта (поля формы 761/пр) и сведения о получении */
@@ -646,6 +652,8 @@ export interface components {
              */
             today: string;
             editable: boolean;
+            /** @description Можно ли удалить акт (DELETE /acts/{id}) */
+            deletable: boolean;
             deadlines: components["schemas"]["Deadlines"] | null;
             /** @description Проверки сроков исполнителя */
             checks: components["schemas"]["Claim"][];
@@ -883,6 +891,30 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteAct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Удалён */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             default: components["responses"]["Error"];
         };
     };

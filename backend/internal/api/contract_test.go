@@ -314,9 +314,13 @@ func TestContract(t *testing.T) {
 	c.do(call{method: "POST", path: "/acts/" + newAct + "/demo-shift", token: ch, body: map[string]any{"to_day": 3}, want: 409})
 
 	demo := c.do(call{method: "POST", path: "/acts/demo", token: "dev:900001", want: 201})
-	if dig(demo, "act", "is_demo") != true {
-		t.Fatal("демо-акт без пометки")
+	if dig(demo, "act", "is_demo") != true || dig(demo, "deletable") != true {
+		t.Fatal("демо-акт без пометки или неудаляемый")
 	}
+	demoID := dig(demo, "act", "id").(string)
+	c.do(call{method: "DELETE", path: "/acts/" + demoID, token: ch, want: 403})
+	c.do(call{method: "DELETE", path: "/acts/" + demoID, token: "dev:900001", want: 204})
+	c.do(call{method: "DELETE", path: "/acts/" + demoID, token: "dev:900001", want: 404})
 	c.do(call{method: "PUT", path: "/me/profile", token: "dev:900002", body: map[string]any{
 		"full_name": "Иванова Мария", "authority_type": "oss_decision", "address": "г. Казань, ул. Баумана, д. 1", "entrances_count": 2}, want: 200})
 	c.do(call{method: "PUT", path: "/me/profile", token: "dev:900003", body: map[string]any{"full_name": "", "authority_type": "x", "address": "", "entrances_count": 0}, want: 422})

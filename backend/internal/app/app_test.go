@@ -614,3 +614,99 @@ func TestTestAccountKeepsWorkableAct(t *testing.T) {
 		t.Fatalf("повторный тик создал акт: %d", len(acts))
 	}
 }
+
+// Удаление акта: демо — всегда (даже после отправки), вместе с файлами; следующий акт цепочки остаётся;
+// настоящий — пока документ не отправлен в УК; чужой — нельзя.
+func TestDeleteAct(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	appErr := func(err error) string {
+		var ae *Error
+		if errors.As(err, &ae) {
+			return ae.Code
+		}
+		return fmt.Sprint(err)
+	}
+	refuseAndSend := func(u store.User, a store.Act) store.Act {
+		t.Helper()
+		lines, err := e.svc.Store().Q().Lines(ctx, a.ID)
+		if err != nil || len(lines) == 0 {
+			t.Fatalf("строки: %v", err)
+		}
+		st, comment := domain.ReviewNotDone, "не выполнено"
+		if _, err := e.svc.UpdateLine(ctx, u.ID, lines[0].ID, LineInput{ReviewStatus: &st, Comment: &comment}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.svc.AddEvidence(ctx, u.ID, lines[0].ID, bytes.NewReader(pngBytes), "p.png", "фото"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.svc.Decide(ctx, u.ID, a.ID, domain.DecisionRefuse, false); err != nil {
+			t.Fatal(err)
+		}
+		a, err = e.svc.Dispatch(ctx, u.ID, a.ID, DispatchInput{Channel: "post", SentOn: e.svc.RealToday()})
+		if err != nil || a.Status != domain.StatusRefusedSent {
+			t.Fatalf("отправка: %v %s", err, a.Status)
+		}
+		return a
+	}
+
+	// Демо-акт после отправки и с новым актом по цепочке.
+	u, a := e.demoAct(t, 6001)
+	a = refuseAndSend(u, a)
+	next, err := e.svc.Successor(ctx, u.ID, a.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := countFiles(t, e.dir); n != 2 {
+		t.Fatalf("файлов до удаления: %d, ожидалось 2 (фото и PDF)", n)
+	}
+	stranger, _ := e.svc.EnsureUser(ctx, 6002, "Чужой", "")
+	if err := e.svc.DeleteAct(ctx, stranger.ID, a.ID); appErr(err) != "FORBIDDEN" {
+		t.Fatalf("чужой акт: %v", err)
+	}
+	if err := e.svc.DeleteAct(ctx, u.ID, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Store().Q().ActByID(ctx, a.ID); err != store.ErrNotFound {
+		t.Fatalf("акт не удалён: %v", err)
+	}
+	if n := countFiles(t, e.dir); n != 0 {
+		t.Fatalf("после удаления на диске осталось файлов: %d", n)
+	}
+	if got, err := e.svc.Store().Q().ActByID(ctx, next.ID); err != nil || got.ParentActID != nil {
+		t.Fatalf("новый акт цепочки: %v, parent %v", err, got.ParentActID)
+	}
+
+	// Настоящий акт: до отправки удаляется, после — нет.
+	r, _ := e.svc.EnsureUser(ctx, 6003, "Мария", "")
+	if _, err := e.svc.SaveProfile(ctx, r.ID, ProfileInput{FullName: "Иванова Мария Петровна", AuthorityType: "oss_decision",
+		City: "Казань", Address: "г. Казань, ул. Баумана, д. 1", EntrancesCount: 2, ExecutorName: "ООО «Настоящая УК»"}); err != nil {
+		t.Fatal(err)
+	}
+	draft, err := e.svc.CreateAct(ctx, r.ID, nil)
+	if err != nil || draft.IsDemo {
+		t.Fatalf("настоящий акт: %v demo=%v", err, draft.IsDemo)
+	}
+	if err := e.svc.DeleteAct(ctx, r.ID, draft.ID); err != nil {
+		t.Fatalf("черновик настоящего акта: %v", err)
+	}
+	real, err := e.svc.CreateAct(ctx, r.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, yes := 2, true
+	if _, err := e.svc.SetReceived(ctx, r.ID, real.ID, ReceivedInput{ReceivedOn: e.svc.RealToday(), Channel: "in_person", CopiesReceived: &two, ExecutorSigned: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	name, amount := "Уборка лестниц", "1000.00"
+	if _, err := e.svc.AddLine(ctx, r.ID, real.ID, LineInput{WorkName: &name, Amount: &amount}); err != nil {
+		t.Fatal(err)
+	}
+	real = refuseAndSend(r, real)
+	if ActDeletable(real) {
+		t.Fatal("отправленный настоящий акт помечен удаляемым")
+	}
+	if err := e.svc.DeleteAct(ctx, r.ID, real.ID); appErr(err) != "ACT_SENT" {
+		t.Fatalf("отправленный настоящий акт: %v", err)
+	}
+}

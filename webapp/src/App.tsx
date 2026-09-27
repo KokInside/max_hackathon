@@ -91,7 +91,7 @@ export function App() {
   if (route.name === 'act') {
     return (
       <Screen title="Проверка акта" onBack={back}>
-        {body ?? <ActScreen view={view!} onChange={setView} reload={reload} openLine={(lineId) => push({ name: 'line', actId: route.id, lineId })} openAct={(id) => setStack((s) => [...s.slice(0, -1), { name: 'act', id }])} />}
+        {body ?? <ActScreen view={view!} onChange={setView} reload={reload} openLine={(lineId) => push({ name: 'line', actId: route.id, lineId })} openAct={(id) => setStack((s) => [...s.slice(0, -1), { name: 'act', id }])} onDeleted={back} />}
       </Screen>
     )
   }

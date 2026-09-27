@@ -171,21 +171,7 @@ func (q *Q) EvidenceByID(ctx context.Context, id string) (Evidence, error) {
 
 // LineFiles — файлы доказательств строки (удаляются вместе со строкой).
 func (q *Q) LineFiles(ctx context.Context, lineID string) ([]File, error) {
-	rows, err := q.q.Query(ctx, `
-		SELECT f.id, f.storage_key FROM evidence e JOIN files f ON f.id = e.file_id WHERE e.line_id = $1`, lineID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []File
-	for rows.Next() {
-		var f File
-		if err := rows.Scan(&f.ID, &f.StorageKey); err != nil {
-			return nil, err
-		}
-		out = append(out, f)
-	}
-	return out, rows.Err()
+	return q.files(ctx, `SELECT f.id, f.storage_key FROM evidence e JOIN files f ON f.id = e.file_id WHERE e.line_id = $1`, lineID)
 }
 
 func (q *Q) DeleteEvidence(ctx context.Context, id string) error {

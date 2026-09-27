@@ -63,6 +63,7 @@ type ActView struct {
 	House       store.House      `json:"house"`
 	Today       civil.Date       `json:"today"`
 	Editable    bool             `json:"editable"`
+	Deletable   bool             `json:"deletable"`
 	Deadlines   *DeadlinesView   `json:"deadlines"`
 	Checks      []Claim          `json:"checks"`
 	Sums        SumsView         `json:"sums"`
@@ -101,7 +102,7 @@ func (s *Service) ActView(ctx context.Context, userID, actID string) (ActView, e
 		return ActView{}, err
 	}
 	q := s.st.Q()
-	v := ActView{Act: a, StatusTitle: a.Status.Title(), House: h, Today: s.ActToday(a), Editable: a.Status.Editable()}
+	v := ActView{Act: a, StatusTitle: a.Status.Title(), House: h, Today: s.ActToday(a), Editable: a.Status.Editable(), Deletable: ActDeletable(a)}
 
 	if !a.ReceivedOn.IsZero() {
 		d := s.rules.Policy.ComputeDeadlines(a.ReceivedOn)

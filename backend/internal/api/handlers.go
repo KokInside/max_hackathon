@@ -103,6 +103,17 @@ func (a *API) patchAct(w http.ResponseWriter, r *http.Request, u store.User) err
 	return a.actView(w, r, u, http.StatusOK)
 }
 
+func (a *API) deleteAct(w http.ResponseWriter, r *http.Request, u store.User) error {
+	if err := validID(r.PathValue("id")); err != nil {
+		return err
+	}
+	if err := a.svc.DeleteAct(r.Context(), u.ID, r.PathValue("id")); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (a *API) addLine(w http.ResponseWriter, r *http.Request, u store.User) error {
 	if err := validID(r.PathValue("id")); err != nil {
 		return err

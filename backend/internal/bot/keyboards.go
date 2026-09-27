@@ -3,6 +3,7 @@ package bot
 import (
 	"github.com/max-messenger/max-bot-api-client-go/v2/model"
 
+	"priemka/internal/app"
 	"priemka/internal/domain"
 	"priemka/internal/store"
 )
@@ -63,6 +64,9 @@ func actKeyboard(b *Bot, a store.Act, demo bool) *model.Keyboard {
 	}
 	if demo && a.IsDemo && !a.ReceivedOn.IsZero() && a.Status.Editable() {
 		rows = append(rows, row(cbBtn("🧪 Демо: перемотать время", "demo:"+a.ID)))
+	}
+	if app.ActDeletable(a) {
+		rows = append(rows, row(cbBtn("🗑 Удалить акт", "adel:"+a.ID)))
 	}
 	rows = append(rows, row(cbBtn("📄 Другой акт", "act_new"), cbBtn("Меню", "menu")))
 	return kb(rows...)

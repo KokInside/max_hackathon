@@ -569,6 +569,36 @@ func fileError(err error, max int64) error {
 
 // ReceiveActFile сохраняет файл акта от УК, полученный ботом, и создаёт акт: новый или (parentActID)
 // следующий после отказа. При ошибке файл и его запись удаляются.
+// ActDeletable — можно ли удалить акт: демо — всегда, настоящий — пока документ не отмечен отправленным в УК
+// (после отправки акт — история переписки с исполнителем; стереть всё можно через удаление данных пользователя).
+func ActDeletable(a store.Act) bool {
+	return a.IsDemo || !a.Status.Sent()
+}
+
+// DeleteAct удаляет акт со строками, доказательствами, документами, ответами жильцов, напоминаниями и файлами.
+func (s *Service) DeleteAct(ctx context.Context, userID, actID string) error {
+	var fs []store.File
+	err := s.withAct(ctx, userID, actID, false, func(q *store.Q, a store.Act, _ store.House) error {
+		if !ActDeletable(a) {
+			return errf(http.StatusConflict, "ACT_SENT", "Документ по акту уже отправлен в УК — акт хранится как история переписки с исполнителем. Удалить все свои данные можно командой /delete в боте.")
+		}
+		var err error
+		if fs, err = q.ActFiles(ctx, a.ID); err != nil {
+			return err
+		}
+		if err := q.DeleteAct(ctx, a.ID); err != nil {
+			return err
+		}
+		return q.DeleteFiles(ctx, fileIDs(fs))
+	})
+	if err != nil {
+		return err
+	}
+	s.removeFiles(fs)
+	s.log.Info("акт удалён", "act", actID, "files", len(fs))
+	return nil
+}
+
 func (s *Service) ReceiveActFile(ctx context.Context, userID string, r io.Reader, name, parentActID string) (store.Act, store.File, error) {
 	saved, err := s.files.Save(r, s.cfg.MaxActFile, files.ImagesAndPDF)
 	if err != nil {

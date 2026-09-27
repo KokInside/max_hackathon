@@ -104,6 +104,20 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "415": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [acts]
+      summary: Удалить акт
+      description: |
+        Удаляет акт со строками, доказательствами, документами, ответами жильцов, напоминаниями и файлами.
+        Демо-акт удаляется всегда; настоящий — пока документ не отмечен отправленным в УК (иначе 409 ACT_SENT).
+        Можно ли удалить — поле `deletable` карточки.
+      operationId: deleteAct
+      responses:
+        default: { $ref: "#/components/responses/Error" }
+        "204": { description: Удалён }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /acts/{id}/lines:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     post:
@@ -671,7 +685,7 @@ components:
         created_at: { type: string, format: date-time }
     ActView:
       type: object
-      required: [act, status_title, house, today, editable, deadlines, checks, sums, lines, documents, dispatches, events,
+      required: [act, status_title, house, today, editable, deletable, deadlines, checks, sums, lines, documents, dispatches, events,
         invite, respondents, source_file_url, notes]
       properties:
         act: { $ref: "#/components/schemas/Act" }
@@ -679,6 +693,7 @@ components:
         house: { $ref: "#/components/schemas/House" }
         today: { type: string, format: date, description: "«Сегодня» для акта (у демо-актов со сдвигом)" }
         editable: { type: boolean }
+        deletable: { type: boolean, description: "Можно ли удалить акт (DELETE /acts/{id})" }
         deadlines: { oneOf: [{ $ref: "#/components/schemas/Deadlines" }, { type: "null" }] }
         checks: { type: array, items: { $ref: "#/components/schemas/Claim" }, description: Проверки сроков исполнителя }
         sums: { $ref: "#/components/schemas/Sums" }

@@ -39,6 +39,11 @@ func (s Status) Editable() bool {
 	return s == StatusDraft || s == StatusInReview || s == StatusDecided
 }
 
+// Sent — документ по акту отмечен отправленным исполнителю (статусы после отметки отправки).
+func (s Status) Sent() bool {
+	return s == StatusClosedSigned || s == StatusRefusedSent || s == StatusReplaced
+}
+
 // Final — акт больше не участвует в приёмке.
 func (s Status) Final() bool {
 	return s == StatusClosedSigned || s == StatusDeemedAccepted || s == StatusReplaced

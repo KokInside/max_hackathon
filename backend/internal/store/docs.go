@@ -25,9 +25,9 @@ func (q *Q) CreateFile(ctx context.Context, f File) (File, error) {
 	return f, err
 }
 
-// UserFiles — файлы пользователя: загруженные им и относящиеся к актам его домов.
+// UserFiles — файлы пользователя: загруженные им и относящиеся к актам его домов (включая фото жильцов к этим актам).
 func (q *Q) UserFiles(ctx context.Context, userID string) ([]File, error) {
-	rows, err := q.q.Query(ctx, `
+	return q.files(ctx, `
 		WITH my_acts AS (
 		    SELECT a.id, a.source_file_id FROM acts a JOIN houses h ON h.id = a.house_id WHERE h.chairman_user_id = $1
 		)
@@ -36,7 +36,22 @@ func (q *Q) UserFiles(ctx context.Context, userID string) ([]File, error) {
 		    OR id IN (SELECT source_file_id FROM my_acts)
 		    OR id IN (SELECT e.file_id FROM evidence e WHERE e.act_id IN (SELECT id FROM my_acts))
 		    OR id IN (SELECT d.file_id FROM documents d WHERE d.act_id IN (SELECT id FROM my_acts))
-		    OR id IN (SELECT v.file_id FROM resident_votes v WHERE v.user_id = $1)`, userID)
+		    OR id IN (SELECT v.file_id FROM resident_votes v WHERE v.user_id = $1)
+		    OR id IN (SELECT v.file_id FROM resident_votes v JOIN act_lines l ON l.id = v.line_id WHERE l.act_id IN (SELECT id FROM my_acts))`, userID)
+}
+
+// ActFiles — файлы акта: исходный акт, доказательства, документы, фото жильцов.
+func (q *Q) ActFiles(ctx context.Context, actID string) ([]File, error) {
+	return q.files(ctx, `
+		SELECT id, storage_key FROM files
+		 WHERE id IN (SELECT source_file_id FROM acts WHERE id = $1)
+		    OR id IN (SELECT file_id FROM evidence WHERE act_id = $1)
+		    OR id IN (SELECT file_id FROM documents WHERE act_id = $1)
+		    OR id IN (SELECT v.file_id FROM resident_votes v JOIN act_lines l ON l.id = v.line_id WHERE l.act_id = $1)`, actID)
+}
+
+func (q *Q) files(ctx context.Context, sql string, args ...any) ([]File, error) {
+	rows, err := q.q.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -12,9 +12,10 @@ type Props = {
   reload: () => Promise<void>
   openLine: (id: string) => void
   openAct: (id: string) => void
+  onDeleted: () => void
 }
 
-export function ActScreen({ view, onChange, reload, openLine, openAct }: Props) {
+export function ActScreen({ view, onChange, reload, openLine, openAct, onDeleted }: Props) {
   const { act } = view
   return (
     <>
@@ -30,6 +31,49 @@ export function ActScreen({ view, onChange, reload, openLine, openAct }: Props) 
       <SuccessorCard view={view} openAct={openAct} />
       <HeaderCard view={view} onChange={onChange} />
       <HistoryCard view={view} />
+      {view.deletable && <DeleteActCard view={view} onDeleted={onDeleted} />}
+    </>
+  )
+}
+
+// DeleteActCard — удаление акта: демо — всегда, настоящего — пока документ не отправлен в УК (поле deletable).
+function DeleteActCard({ view, onDeleted }: { view: ActView; onDeleted: () => void }) {
+  const toast = useToast()
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const a = view.act
+  return (
+    <>
+      <Button stretched variant="secondary" onClick={() => setOpen(true)}>
+        Удалить акт
+      </Button>
+      {/* window.confirm в webview мини-приложений может быть заблокирован — подтверждаем своим окном */}
+      <Sheet open={open} onClose={() => setOpen(false)} title="Удалить акт?">
+        <p>
+          Акт № {a.number || 'б/н'}{a.is_demo && ' (ДЕМО)'} будет удалён вместе со строками ({view.lines.length}), фото, документами ({view.documents.length}),
+          ответами жильцов и напоминаниями. Действие нельзя отменить.
+        </p>
+        <Button
+          stretched
+          variant="destructive"
+          loading={busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await api.deleteAct(a.id)
+              toast('Акт удалён')
+              setOpen(false)
+              onDeleted()
+            } catch (e) {
+              toast((e as Error).message, 'bad')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          Удалить
+        </Button>
+      </Sheet>
     </>
   )
 }

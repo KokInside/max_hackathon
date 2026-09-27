@@ -182,6 +182,34 @@ func (s *session) callback(payload string) error {
 			return s.demoShift(arg, arg2)
 		}
 		return s.demoActions(arg)
+	case "adel":
+		a, err := s.act(arg)
+		if err != nil {
+			return err
+		}
+		what := "строки, фото, документы, ответы жильцов и напоминания"
+		if a.IsDemo {
+			what = "демо-акт со строками, документами и напоминаниями"
+		}
+		return s.send(fmt.Sprintf("Удалить акт № %s (%s)? Будут удалены %s. Это необратимо.", numberOrNone(a.Number), lowerFirst(a.Status.Title()), what),
+			kb(row(cbBtn("🗑 Удалить", "adelc:"+a.ID), cbBtn("Отмена", "open:"+a.ID))))
+	case "adelc":
+		a, err := s.act(arg)
+		if err != nil {
+			return err
+		}
+		if err := s.b.svc.DeleteAct(s.ctx, s.user.ID, a.ID); err != nil {
+			return err
+		}
+		if s.sess.Data["act"] == a.ID || s.sess.Data["parent"] == a.ID {
+			if err := s.clearState(); err != nil {
+				return err
+			}
+		}
+		if err := s.send(fmt.Sprintf("🗑 Акт № %s удалён.", numberOrNone(a.Number)), nil); err != nil {
+			return err
+		}
+		return s.menu()
 	case "open":
 		a, err := s.act(arg)
 		if err != nil {
@@ -190,6 +218,13 @@ func (s *session) callback(payload string) error {
 		return s.send(s.b.actLine(a), actKeyboard(s.b, a, s.b.svc.Config().DemoMode))
 	}
 	return s.menu()
+}
+
+func numberOrNone(n string) string {
+	if n == "" {
+		return "без номера"
+	}
+	return n
 }
 
 // lowerFirst — первая буква строчная (по рунам: строки кириллические).

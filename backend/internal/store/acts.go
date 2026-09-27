@@ -113,6 +113,13 @@ func (q *Q) ActByID(ctx context.Context, id string) (Act, error) {
 }
 
 // ActForUpdate блокирует строку акта до конца транзакции.
+// DeleteAct удаляет акт; строки, доказательства, документы, отправки, напоминания и история удаляются каскадом,
+// у следующего акта цепочки ссылка на прежний обнуляется. Записи файлов удаляет вызывающий (DeleteFiles).
+func (q *Q) DeleteAct(ctx context.Context, id string) error {
+	_, err := q.q.Exec(ctx, `DELETE FROM acts WHERE id = $1`, id)
+	return err
+}
+
 func (q *Q) ActForUpdate(ctx context.Context, id string) (Act, error) {
 	return scanAct(q.q.QueryRow(ctx, `SELECT `+actCols+` FROM acts WHERE id = $1 FOR UPDATE`, id))
 }
