@@ -710,3 +710,29 @@ func TestDeleteAct(t *testing.T) {
 		t.Fatalf("отправленный настоящий акт: %v", err)
 	}
 }
+
+// Акт из файла приходит без номера: в напоминаниях — «Акт № без номера», а не «Акт № :».
+func TestReminderWithoutNumber(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	u, _ := e.svc.EnsureUser(ctx, 6101, "Мария", "")
+	if _, err := e.svc.SaveProfile(ctx, u.ID, ProfileInput{FullName: "Иванова Мария Петровна", AuthorityType: "oss_decision",
+		City: "Казань", Address: "г. Казань, ул. Баумана, д. 1", EntrancesCount: 2, ExecutorName: "ООО «Настоящая УК»"}); err != nil {
+		t.Fatal(err)
+	}
+	a, err := e.svc.CreateAct(ctx, u.ID, nil)
+	if err != nil || a.Number != "" {
+		t.Fatalf("акт: %v, номер %q", err, a.Number)
+	}
+	if _, err := e.svc.SetReceived(ctx, u.ID, a.ID, ReceivedInput{ReceivedOn: e.svc.RealToday().AddDays(-9)}); err != nil {
+		t.Fatal(err)
+	}
+	e.svc.Tick(ctx)
+	if len(e.notif.texts) == 0 {
+		t.Fatal("напоминание 9-го дня не отправлено")
+	}
+	last := e.notif.texts[len(e.notif.texts)-1]
+	if !strings.Contains(last, "Акт № без номера:") || strings.Contains(last, "№ :") {
+		t.Fatalf("номер в напоминании: %q", last)
+	}
+}

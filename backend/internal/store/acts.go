@@ -113,6 +113,14 @@ func (q *Q) ActByID(ctx context.Context, id string) (Act, error) {
 }
 
 // ActForUpdate блокирует строку акта до конца транзакции.
+// DisplayNumber — номер акта для сообщений: «без номера», пока председатель его не указал (акт из файла приходит без номера).
+func (a Act) DisplayNumber() string {
+	if a.Number == "" {
+		return "без номера"
+	}
+	return a.Number
+}
+
 // DeleteAct удаляет акт; строки, доказательства, документы, отправки, напоминания и история удаляются каскадом,
 // у следующего акта цепочки ссылка на прежний обнуляется. Записи файлов удаляет вызывающий (DeleteFiles).
 func (q *Q) DeleteAct(ctx context.Context, id string) error {

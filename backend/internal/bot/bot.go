@@ -273,7 +273,7 @@ func (s *session) menu() error {
 
 // actLine — одна строка о состоянии акта.
 func (b *Bot) actLine(a store.Act) string {
-	s := fmt.Sprintf("Акт № %s — %s.", numberOrNone(a.Number), a.Status.Title())
+	s := fmt.Sprintf("Акт № %s — %s.", a.DisplayNumber(), a.Status.Title())
 	if !a.ReceivedOn.IsZero() && a.Status.Editable() {
 		t := b.svc.Rules().Policy.Timing(a.ReceivedOn, b.svc.ActToday(a))
 		d := b.svc.Rules().Policy.ComputeDeadlines(a.ReceivedOn)

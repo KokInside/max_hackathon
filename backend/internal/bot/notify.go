@@ -37,7 +37,7 @@ func (b *Bot) SendDocument(ctx context.Context, chairmanMaxID int64, a store.Act
 		what = "Сопроводительное письмо к подписанному акту"
 		next = "Подпишите акт и письмо и верните исполнителю один экземпляр акта. Затем отметьте отправку."
 	}
-	text := fmt.Sprintf("📎 %s № %s (версия %d).\n\n%s\n\nДокумент — шаблон: правовые формулировки не проверены юристом, прочитайте перед подписанием.", what, a.Number, doc.Version, next)
+	text := fmt.Sprintf("📎 %s № %s (версия %d).\n\n%s\n\nДокумент — шаблон: правовые формулировки не проверены юристом, прочитайте перед подписанием.", what, a.DisplayNumber(), doc.Version, next)
 	if a.IsDemo {
 		text += "\n\n🧪 ДЕМО: документ содержит синтетические данные."
 	}

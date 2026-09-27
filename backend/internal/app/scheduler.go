@@ -99,6 +99,7 @@ type reminderData struct {
 func (s *Service) reminderData(a store.Act) reminderData {
 	d := s.rules.Policy.ComputeDeadlines(a.ReceivedOn)
 	t := s.rules.Policy.Timing(a.ReceivedOn, s.ActToday(a))
+	a.Number = a.DisplayNumber() // в напоминаниях «Акт № без номера», а не «Акт № :»
 	return reminderData{Act: a, ResponseOn: d.ResponseOn.Russian(), SilentOn: d.SilentOn.Russian(), Received: a.ReceivedOn.Russian(),
 		DaysLeftResponse: t.DaysLeftResponse, DaysLeftSilent: t.DaysLeftSilent,
 		ResponseDays: s.rules.Policy.ResponseDays, SilentDays: s.rules.Policy.SilentDays, CountingNextDay: s.rules.Policy.CountingNextDay,

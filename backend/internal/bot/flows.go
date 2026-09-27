@@ -191,7 +191,7 @@ func (s *session) callback(payload string) error {
 		if a.IsDemo {
 			what = "демо-акт со строками, документами и напоминаниями"
 		}
-		return s.send(fmt.Sprintf("Удалить акт № %s (%s)? Будут удалены %s. Это необратимо.", numberOrNone(a.Number), lowerFirst(a.Status.Title()), what),
+		return s.send(fmt.Sprintf("Удалить акт № %s (%s)? Будут удалены %s. Это необратимо.", a.DisplayNumber(), lowerFirst(a.Status.Title()), what),
 			kb(row(cbBtn("🗑 Удалить", "adelc:"+a.ID), cbBtn("Отмена", "open:"+a.ID))))
 	case "adelc":
 		a, err := s.act(arg)
@@ -206,7 +206,7 @@ func (s *session) callback(payload string) error {
 				return err
 			}
 		}
-		if err := s.send(fmt.Sprintf("🗑 Акт № %s удалён.", numberOrNone(a.Number)), nil); err != nil {
+		if err := s.send(fmt.Sprintf("🗑 Акт № %s удалён.", a.DisplayNumber()), nil); err != nil {
 			return err
 		}
 		return s.menu()
@@ -218,13 +218,6 @@ func (s *session) callback(payload string) error {
 		return s.send(s.b.actLine(a), actKeyboard(s.b, a, s.b.svc.Config().DemoMode))
 	}
 	return s.menu()
-}
-
-func numberOrNone(n string) string {
-	if n == "" {
-		return "без номера"
-	}
-	return n
 }
 
 // lowerFirst — первая буква строчная (по рунам: строки кириллические).
@@ -378,7 +371,7 @@ func (s *session) summary(actID string) error {
 	} else if !a.ActDate.IsZero() {
 		text += "\n\nСроки оформления и направления акта исполнителем соблюдены."
 	} else {
-		text += "\n\nУкажите в мини-приложении дату акта и период — я проверю сроки самой УК."
+		text += "\n\nУкажите в мини-приложении номер и дату акта и период: они попадут в документ, а по датам я проверю сроки самой УК."
 	}
 	if a.IsDemo {
 		text += "\n\n🧪 Это демо-акт. Чтобы увидеть напоминания 9-го дня и молчаливую приёмку, нажмите «Демо: перемотать время»."
