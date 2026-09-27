@@ -226,7 +226,14 @@ docker compose logs -f app     # логи бэкенда
 
 ## Развёртывание (прод)
 
-Нужен сервер с публичным IPv4 (Ubuntu 22.04/24.04, 2 vCPU, 2 ГБ RAM, 20 ГБ диска), Docker и домен с A-записью на сервер. Вместо своего домена можно использовать имя вида `<IP>.sslip.io`. Порты 80 и 443 должны быть открыты.
+Нужен сервер с публичным IPv4 (Ubuntu 22.04/24.04), Docker с Compose v2 и домен с A-записью на сервер. Вместо своего домена можно использовать имя вида `<IP>.sslip.io`. Порты 80 и 443 (TCP и UDP) должны быть открыты: вебхук MAX принимается только на 443.
+
+Минимум — 1 vCPU, 1 ГБ RAM, 20 ГБ диска. В работе стек занимает около 50 МБ памяти; пик — при сборке на сервере (компиляция Go — до 400 МБ, сборка фронта — ещё около 300 МБ). На 1 ГБ RAM перед первой сборкой добавьте swap и собирайте образы по очереди:
+
+```bash
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
 
 ```bash
 git clone <репозиторий> priemka && cd priemka
@@ -244,7 +251,8 @@ DEMO_MODE=true
 DEV_AUTH=false
 TEST_ACCOUNTS=chairman:$(openssl rand -hex 16),resident:$(openssl rand -hex 16)
 EOF
-docker compose up -d --build
+docker compose build app && docker compose build web   # по очереди: меньше пик памяти
+docker compose up -d
 ```
 
 После этого:
