@@ -258,6 +258,18 @@ func TestBotScenario(t *testing.T) {
 		t.Fatalf("в сводке нет кнопок «Открыть проверку» (open_app) и «Пригласить жильцов»: %+v", sum.Buttons)
 	}
 
+	// Профиль доступен из меню и при текущем акте; изменение можно отменить, прежний профиль остаётся.
+	menuAct := h.expect(h.text("/menu"), "Акт № 17")
+	if btn(menuAct, "profile") == "" || btn(menuAct, "adel:") == "" {
+		t.Fatalf("в меню при акте нет «Профиль» или кнопок акта: %+v", menuAct.Buttons)
+	}
+	prof := h.expect(h.text("/profile"), "Профиль:")
+	h.expect(h.press(btn(prof, "profile_edit")), "Изменим профиль")
+	h.expect(h.press("menu"), "Дом: г. Демоград")
+	if cmds := Commands(true); cmds[0].Name != "start" {
+		t.Fatalf("первая команда меню MAX: %s", cmds[0].Name)
+	}
+
 	// 8. Приглашение жильцов — текстовая ссылка со startapp.
 	h.expect(h.press("inv:"+actID), "startapp=inv_")
 

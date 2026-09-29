@@ -79,7 +79,7 @@ export function Resident({ token }: { token: string }) {
         <p className="muted small">
           Акт № {view.act_number || 'б/н'}, период {date(view.period_from)} — {date(view.period_to)}
         </p>
-        {view.is_demo && <Chip tone="demo">ДЕМО · синтетические данные</Chip>}
+        {view.is_demo && <p><Chip tone="demo">ДЕМО · синтетические данные</Chip></p>}
         <p className="small">Отметьте, видели ли вы эти работы в своём подъезде и во дворе. Ваше имя в документы не попадает — совет видит только число ответов и комментарии.</p>
       </Card>
       {!view.open ? (

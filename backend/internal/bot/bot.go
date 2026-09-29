@@ -84,7 +84,9 @@ func New(c *maxbot.Client, svc *app.Service, log *slog.Logger) *Bot {
 // Commands — команды для меню MAX; должны совпадать с обработкой в message().
 func Commands(demo bool) []maxbot.Command {
 	cmds := []maxbot.Command{
+		{Name: "start", Description: "Начать работу с ботом"},
 		{Name: "menu", Description: "Текущий акт и главное меню"},
+		{Name: "profile", Description: "Профиль председателя: посмотреть и изменить"},
 		{Name: "help", Description: "Как работает приёмка акта"},
 	}
 	if demo {
@@ -209,13 +211,21 @@ func (s *session) message(m model.MessageUpdate) error {
 			return s.menu()
 		case "/help":
 			return s.help()
+		case "/profile":
+			if s.user.ConsentAt == nil {
+				return s.start()
+			}
+			if err := s.clearState(); err != nil {
+				return err
+			}
+			return s.showProfile()
 		case "/demo":
 			return s.demoMenu()
 		case "/delete":
 			return s.send("Удалить все ваши данные в сервисе: профиль, дом, акты, документы и ответы? Это необратимо.",
 				kb(row(cbBtn("Удалить навсегда", "delete_confirm")), row(cbBtn("Отмена", "menu"))))
 		}
-		return s.send("Не знаю такой команды. Доступно: /menu, /help, /demo, /delete.", nil)
+		return s.send("Не знаю такой команды. Доступно: /start, /menu, /profile, /help, /demo, /delete.", nil)
 	}
 	if text == "" {
 		return s.send("Пришлите акт файлом (PDF) или фото, либо откройте /menu.", nil)
@@ -264,7 +274,7 @@ func (s *session) menu() error {
 	k := menuKeyboard(s.b.svc.Config().DemoMode)
 	if cur != nil {
 		text += "\n\n" + s.b.actLine(*cur)
-		k = actKeyboard(s.b, *cur, s.b.svc.Config().DemoMode)
+		k = menuActKeyboard(s.b, *cur, s.b.svc.Config().DemoMode)
 	} else {
 		text += "\n\nАктов на проверке нет. Когда получите акт от УК — пришлите его сюда."
 	}

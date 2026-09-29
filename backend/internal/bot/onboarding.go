@@ -23,6 +23,10 @@ const (
 )
 
 func (s *session) startOnboarding() error {
+	prof, err := s.b.svc.Profile(s.ctx, s.user.ID)
+	if err != nil {
+		return err
+	}
 	if err := s.setState(stName, map[string]string{}); err != nil {
 		return err
 	}
@@ -30,8 +34,13 @@ func (s *session) startOnboarding() error {
 	if s.b.svc.Config().DemoMode {
 		extra = append(extra, row(cbBtn("🧪 Заполнить демо-профилем", "demo_profile")))
 	}
-	return s.send("Заполним профиль — это нужно один раз: данные попадут в шапку документов.\n\n"+
-		"Шаг 1 из 8. Ваши фамилия, имя и отчество — как в решении собрания или доверенности.", kb(extra...))
+	intro := "Заполним профиль — это нужно один раз: данные попадут в шапку документов."
+	if prof.Complete() {
+		extra = append(extra, row(cbBtn("Отмена — оставить как есть", "menu")))
+		intro = "Изменим профиль: ответьте на вопросы заново, прежний профиль сохранится до последнего шага. " +
+			"Новые данные попадут в шапку следующих актов; в уже созданных актах реквизиты правятся в мини-приложении."
+	}
+	return s.send(intro+"\n\nШаг 1 из 8. Ваши фамилия, имя и отчество — как в решении собрания или доверенности.", kb(extra...))
 }
 
 var reDateNum = regexp.MustCompile(`(\d{1,2}\.\d{1,2}\.\d{4})`)

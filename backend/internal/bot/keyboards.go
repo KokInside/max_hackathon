@@ -46,6 +46,17 @@ func menuKeyboard(demo bool) *model.Keyboard {
 
 // actKeyboard — действия по текущему акту в зависимости от статуса.
 func actKeyboard(b *Bot, a store.Act, demo bool) *model.Keyboard {
+	return kb(actRows(b, a, demo)...)
+}
+
+// menuActKeyboard — главное меню при текущем акте: кнопки акта и доступ к профилю и справке.
+func menuActKeyboard(b *Bot, a store.Act, demo bool) *model.Keyboard {
+	rows := actRows(b, a, demo)
+	rows[len(rows)-1] = row(cbBtn("📄 Другой акт", "act_new"), cbBtn("Профиль", "profile"))
+	return kb(append(rows, row(cbBtn("Как это работает", "help")))...)
+}
+
+func actRows(b *Bot, a store.Act, demo bool) [][]button {
 	var rows [][]button
 	switch a.Status {
 	case domain.StatusDraft:
@@ -68,6 +79,5 @@ func actKeyboard(b *Bot, a store.Act, demo bool) *model.Keyboard {
 	if app.ActDeletable(a) {
 		rows = append(rows, row(cbBtn("🗑 Удалить акт", "adel:"+a.ID)))
 	}
-	rows = append(rows, row(cbBtn("📄 Другой акт", "act_new"), cbBtn("Меню", "menu")))
-	return kb(rows...)
+	return append(rows, row(cbBtn("📄 Другой акт", "act_new"), cbBtn("Меню", "menu")))
 }
