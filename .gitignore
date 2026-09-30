@@ -21,6 +21,7 @@ export-*/
 # Документы организаторов и выгрузки КонсультантПлюс не публикуем — ссылки в README
 docs/tz/
 docs/*.pdf
+docs/internal/
 
 # Резервные копии (scripts/backup.sh)
 backups/

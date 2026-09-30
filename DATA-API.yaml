@@ -1,9 +1,9 @@
 # Обязательные проверки собственного API «Приёмка» (ТЗ трека «Умный город», «Формат сдачи», п. 5).
-# ASSUMPTION: организаторы не опубликовали схему файла; поля повторяют перечень из ТЗ:
+# Допущение: организаторы не опубликовали схему файла, поэтому поля повторяют перечень из ТЗ:
 #   1 schema_version · 2 solution · 3 base_url · 4 checks · 5 method + path · 6 params (path, query, headers, body)
 #   7 role · 8 expected_status · 9 response (content_type, schema, required).
 # Токены тестовых учёток в репозиторий не кладутся: они на первом слайде презентации.
-# Прогон: scripts/check-api.sh https://<домен>/api/v1 <CHAIRMAN_TOKEN> <RESIDENT_TOKEN>
+# Прогон: scripts/check-api.sh https://max-hackathon-84.ru/api/v1 <CHAIRMAN_TOKEN> <RESIDENT_TOKEN>
 #   (читает этот файл; тот же код в go test сверяет проверки с API и openapi.yaml).
 #
 # Данные: у тестового председателя всегда есть демо-акт на проверке — первый в списке. Сервер создаёт новый,
