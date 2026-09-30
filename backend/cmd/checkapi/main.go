@@ -36,8 +36,15 @@ func main() {
 		os.Exit(2)
 	}
 	tokens := map[string]string{}
+	owner := map[string]string{} // токен → роль: одинаковые токены у двух ролей дают ложные результаты проверок доступа
 	for role := range spec.Roles {
-		tokens[role] = os.Getenv(strings.ToUpper(role) + "_TOKEN")
+		tok := os.Getenv(strings.ToUpper(role) + "_TOKEN")
+		if other, dup := owner[tok]; dup && tok != "" {
+			fmt.Fprintf(os.Stderr, "у ролей %s и %s одинаковый токен — проверьте порядок и значения токенов (TEST_ACCOUNTS на сервере)\n", other, role)
+			os.Exit(2)
+		}
+		owner[tok] = role
+		tokens[role] = tok
 	}
 
 	fmt.Printf("%s — %s, проверок: %d\n", spec.Solution, *base, len(spec.Checks))

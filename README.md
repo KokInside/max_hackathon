@@ -295,8 +295,7 @@ config/           rules/ (правила и источники), templates/ (т�
 assets/fonts/     PT Serif и лицензия OFL
 certs/            корневой сертификат Минцифры
 demo/             act-demo.pdf
-docs/             анализ задачи (analysis.md), требования ТЗ (requirements.md), контекст (context.md), план (PLAN.md),
-                  журнал проверки кода (REVIEW.md), чек-лист ручной проверки в MAX (CHECKLIST.md)
+docs/             CHECKLIST.md — чек-лист ручной проверки в MAX (мобильная и веб-версия)
 scripts/          check.sh — проверки кода (vet, staticcheck, тесты, govulncheck, tsc, npm audit);
                   check-api.sh — проверки собственного API; e2e.py — сквозной прогон сценария через API (локально);
                   backup.sh — резервная копия БД и файлов

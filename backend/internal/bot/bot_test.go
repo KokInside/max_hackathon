@@ -1,6 +1,6 @@
 package bot
 
-// Сквозной тест диалога с ботом по сценарию PLAN §7: поддельный сервер MAX (httptest, TLS) + настоящая PostgreSQL.
+// Сквозной тест диалога с ботом по сценарию проверки из README: поддельный сервер MAX (httptest, TLS) + настоящая PostgreSQL.
 // Запуск: TEST_DATABASE_URL=postgres://… go test ./internal/bot
 
 import (

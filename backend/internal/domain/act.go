@@ -2,7 +2,7 @@ package domain
 
 import "fmt"
 
-// Status — статус акта (PLAN.md §3).
+// Status — статус акта.
 type Status string
 
 const (
@@ -15,7 +15,7 @@ const (
 	StatusReplaced       Status = "replaced"
 )
 
-// transitions — допустимые переходы статуса акта (PLAN.md §3).
+// transitions — допустимые переходы статуса акта.
 var transitions = map[Status][]Status{
 	StatusDraft:        {StatusInReview},
 	StatusInReview:     {StatusDecided, StatusDeemedAccepted},
