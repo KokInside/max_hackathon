@@ -11,7 +11,6 @@ interface WebApp {
   BackButton?: BackButton
   downloadFile?: (url: string, fileName: string) => Promise<unknown> | void
   openLink?: (url: string) => void
-  shareMaxContent?: (p: { text?: string; link?: string }) => Promise<unknown> | void
   enableClosingConfirmation?: () => void
   disableClosingConfirmation?: () => void
 }
@@ -83,17 +82,6 @@ export async function download(url: string, fileName: string): Promise<boolean> 
   }
   window.open(abs, '_blank')
   return true
-}
-
-export async function share(text: string, link: string): Promise<boolean> {
-  const w = wa()
-  if (!w?.shareMaxContent) return false
-  try {
-    await w.shareMaxContent({ text, link })
-    return true
-  } catch {
-    return false
-  }
 }
 
 export async function copy(text: string): Promise<boolean> {

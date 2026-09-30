@@ -70,11 +70,12 @@ export function LineScreen({ view, line, reload, onDeleted }: { view: ActView; l
       <Card title="Оценка">
         <div className="seg">
           {statuses.map((s) => (
-            <button key={s} className={'seg__btn seg__btn--' + s + (line.review_status === s ? ' is-active' : '')} disabled={!editable || !!busy} onClick={() => save({ review_status: s }, s, reviewTitle[s])}>
+            <button key={s} className={'seg__btn seg__btn--' + s + (line.review_status === s ? ' is-active' : '')} disabled={!editable || !!busy} onClick={() => (line.review_status === s ? save({ review_status: 'unchecked' }, s, 'Отметка снята') : save({ review_status: s }, s, reviewTitle[s]))}>
               {reviewTitle[s]}
             </button>
           ))}
         </div>
+        {editable && line.review_status !== 'unchecked' && <p className="muted small">Нажмите на выбранную оценку ещё раз, чтобы снять её.</p>}
         <label className="field">
           Возражение / комментарий {disputedNow && <span className="warn-text">— попадёт в отказ</span>}
           <Textarea value={comment} disabled={!editable} onChange={(e) => setComment(e.target.value)} placeholder="Что именно не выполнено, когда проверяли, кто видел" rows={4} />

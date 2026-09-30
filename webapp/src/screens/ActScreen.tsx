@@ -3,7 +3,7 @@ import { Button, Input, Typography } from '@maxhub/max-ui'
 import { api, ApiError, type ActView, type HeaderPatch, type S } from '../api/client'
 import { channelTitle, date, eventTitle, plural, reviewTitle, rub } from '../format'
 import { BasisLink, Card, Chip, ClaimRow, Sheet, useToast } from '../ui'
-import { copy, download, share } from '../bridge'
+import { copy, download } from '../bridge'
 import { AddLine } from './AddLine'
 
 type Props = {
@@ -272,11 +272,8 @@ function ResidentsCard({ view }: { view: ActView }) {
           <>
             <p className="mono small">{inv.link}</p>
             <div className="row gap wrap">
-              <Button size="small" variant="secondary" onClick={async () => toast((await copy(inv.text || inv.link)) ? 'Скопировано' : 'Не удалось скопировать', 'ok')}>
+              <Button size="small" variant="secondary" onClick={async () => ((await copy(inv.text || inv.link)) ? toast('Скопировано — вставьте в чат дома', 'ok') : toast('Не удалось скопировать: выделите ссылку выше или нажмите «👥 Пригласить жильцов» в боте', 'bad'))}>
                 Скопировать текст
-              </Button>
-              <Button size="small" variant="secondary" onClick={async () => { if (!(await share(inv.text || 'Проверьте работы УК в нашем доме', inv.link))) toast('Перешлите ссылку вручную: кнопка «Скопировать».', 'bad') }}>
-                Поделиться в MAX
               </Button>
               {!inv.text && (
                 <Button size="small" variant="ghost" onClick={create} loading={busy}>

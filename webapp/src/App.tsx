@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api, type ActView, type Me } from './api/client'
 import { inMax, devUser, setBack, startParam } from './bridge'
 import { ErrorBox, Loading, Screen } from './ui'
@@ -54,7 +54,21 @@ export function App() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [reload])
 
-  const push = (r: Route) => setStack((s) => [...s, r])
+  // Прокрутка: новый экран открывается сверху, при возврате — там, где пользователь был.
+  const scrolls = useRef<number[]>([])
+  const shown = useRef({ depth: stack.length, key: JSON.stringify(route) })
+  useLayoutEffect(() => {
+    const key = JSON.stringify(route)
+    const prev = shown.current
+    if (stack.length < prev.depth) window.scrollTo(0, scrolls.current[stack.length - 1] ?? 0)
+    else if (key !== prev.key) window.scrollTo(0, 0)
+    shown.current = { depth: stack.length, key }
+  }, [stack, route])
+
+  const push = (r: Route) => {
+    scrolls.current[stack.length - 1] = window.scrollY
+    setStack((s) => [...s, r])
+  }
   const back = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), [])
   const canBack = stack.length > 1
   useEffect(() => {
