@@ -12,7 +12,7 @@
 
 schema_version: "1.0"
 solution: "Приёмка — рабочее место председателя совета МКД (бот t84_hakaton_max_bot)"
-base_url: "https://<домен>/api/v1"   # заменить на адрес прода перед сдачей
+base_url: "https://max-hackathon-84.ru/api/v1"
 openapi: "api/openapi.yaml"
 
 roles:

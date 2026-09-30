@@ -15,7 +15,10 @@ info:
     405 (неверный HTTP-метод, заголовок Allow) и 429 (больше 10 запросов в секунду от пользователя, заголовок Retry-After) —
     они описаны ответом `default`. Суммы — строки с двумя знаками после точки («1234.50»), даты — «ГГГГ-ММ-ДД».
 servers:
+  - url: https://max-hackathon-84.ru/api/v1
+    description: Прод
   - url: /api/v1
+    description: Текущий хост (локально — http://localhost:8080)
 security:
   - initData: []
   - bearer: []
